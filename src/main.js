@@ -8,8 +8,16 @@ import { Vector3 }      from '@babylonjs/core/Maths/math.vector'
 import { SceneLoader }  from '@babylonjs/core/Loading/sceneLoader'
 import { Texture }      from '@babylonjs/core/Materials/Textures/texture'
 
+// Side-effect: extend Scene.prototype with createDefaultEnvironment
+import '@babylonjs/core/Helpers/sceneHelpers'
+
 // Side-effect: register the glTF / GLB loader plugin
 import '@babylonjs/loaders/glTF'
+
+// Inspector (lazy-loaded, dev only — excluded from production bundle)
+if (import.meta.env.DEV) {
+  import('@babylonjs/inspector')
+}
 
 // ── Canvas & Engine ──────────────────────────────────────────────
 const canvas = document.getElementById('renderCanvas')
@@ -29,17 +37,17 @@ camera.pinchPrecision    = 40          // slower pinch-zoom on mobile
 camera.panningSensibility = 200        // two-finger pan speed
 camera.minZ = 0.1                     // near clip
 
-// ── NO lights — baked lightmap only ──────────────────────────────
+// ── Minimal env light for PBR (no ground/skybox — baked lightmap does the rest)
+scene.createDefaultEnvironment({ createGround: false, createSkybox: false })
+
+// ── Inspector — open with Shift+Ctrl+Alt+I or uncomment next line ────────────
+// scene.debugLayer.show();
 
 // ── Base URL (works in dev "/" and on GitHub Pages "/lp-ots/") ───
 const base = import.meta.env.BASE_URL
 
 // ── Load GLB & apply lightmap to UV2 ─────────────────────────────
 SceneLoader.ImportMeshAsync(null, `${base}models/`, 'hotel-01.glb', scene).then((result) => {
-  // Frame the camera on the loaded model
-  const root = result.meshes[0]
-  scene.createDefaultCamera(false)       // don't replace our camera, just use for framing reference
-
   // Adjust camera target to centre of bounding box
   let min = new Vector3(Infinity, Infinity, Infinity)
   let max = new Vector3(-Infinity, -Infinity, -Infinity)
@@ -54,15 +62,20 @@ SceneLoader.ImportMeshAsync(null, `${base}models/`, 'hotel-01.glb', scene).then(
   camera.target = centre
   camera.radius = diag * 0.75
 
-  // Create lightmap texture once, share across materials
-  const lightmap = new Texture(`${base}models/LightMap-backed.png`, scene)
-  lightmap.coordinatesIndex = 1          // UV2  (glTF TEXCOORD_1)
+  // Create lightmap texture once, share across materials.
+  // noMipmap=false, invertY=false — GLB baked textures must NOT be Y-flipped.
+  // WebGL's default is to invert Y on load; we disable that here so the baked
+  // shadows/AO align with the geometry correctly.
+  const lightmap = new Texture(`${base}models/LightMap-baked.png`, scene, false, false)
+  // coordinatesIndex = 1 → UV2 (TEXCOORD_1 in glTF) — not the base texture UV
+  lightmap.coordinatesIndex = 1
 
-  // Apply lightmap to every material in the scene
+  // Apply lightmap to every mesh that has a PBR material
   for (const mesh of result.meshes) {
     if (!mesh.material) continue
     mesh.material.lightmapTexture = lightmap
     mesh.material.useLightmapAsShadowmap = true
+    mesh.material.lightmapTexture.level = 1.0   // shadow intensity (0 = none, 1 = full)
   }
 
   console.log(`✔ Model loaded — ${result.meshes.length} meshes, lightmap on UV2 applied`)
