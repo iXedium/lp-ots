@@ -74,7 +74,7 @@ camera.panningSensibility = 200
 camera.minZ = 0.1
 
 // ── Inspector toggle (F8) — dev only ─────────────────────────────
-if (import.meta.env.DEV) {
+// if (import.meta.env.DEV) {
   window.__scene = scene
   window.addEventListener('keydown', (e) => {
     if (e.key === 'F8' && inspectorReady) {
@@ -89,7 +89,7 @@ if (import.meta.env.DEV) {
       }
     }
   })
-}
+// }
 
 // ── Detect if a material is transparent (smart — not name-based) ─
 function isTransparentMaterial(mat) {
