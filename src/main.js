@@ -25,7 +25,7 @@ import '@babylonjs/core/Debug/debugLayer'
 const base = import.meta.env.BASE_URL
 
 // ── Inspector — dev only, pre-bundled by Vite (see optimizeDeps.include) ─────
-let inspectorReady = false
+let inspectorReady = true
 if (import.meta.env.DEV) {
   import('@babylonjs/inspector').then(() => {
     inspectorReady = true
