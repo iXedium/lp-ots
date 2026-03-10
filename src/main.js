@@ -9,6 +9,11 @@ import { Color4 }          from '@babylonjs/core/Maths/math.color'
 import { Texture }         from '@babylonjs/core/Materials/Textures/texture'
 import { CubeTexture }     from '@babylonjs/core/Materials/Textures/cubeTexture'
 import { ImportMeshAsync }  from '@babylonjs/core/Loading/sceneLoader'
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight'
+import { ShadowGenerator }  from '@babylonjs/core/Lights/Shadows/shadowGenerator'
+
+// Side-effect: register ShadowGeneratorSceneComponent (required for shadows)
+import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent'
 
 // Side-effect: register glTF/GLB loader plugin
 import '@babylonjs/loaders/glTF'
@@ -32,6 +37,7 @@ if (import.meta.env.DEV) {
 const canvas = document.getElementById('renderCanvas')
 const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true }, true)
 
+
 // ── Scene ────────────────────────────────────────────────────────
 const scene = new Scene(engine)
 scene.clearColor = new Color4(0.53, 0.81, 0.92, 1.0)   // sky blue
@@ -41,6 +47,21 @@ scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(
   `${base}textures/environmentSpecular.env`, scene
 )
 scene.environmentIntensity = 1.0
+
+// ── Directional Light & Shadows ────────────────────────────────
+const dirLight = new DirectionalLight('dirLight', new Vector3(-0.49333320025636596, -0.7071067987081836, -0.5065790449135029), scene)
+dirLight.intensity = 16
+dirLight.autoUpdateExtends = true
+dirLight.autoCalcShadowZBounds = true
+dirLight.shadowEnabled = true
+
+const shadowGen = new ShadowGenerator(2048, dirLight)
+shadowGen.bias = 0.0016
+shadowGen.normalBias = 0
+shadowGen.darkness = 0.27
+shadowGen.transparencyShadow = false
+shadowGen.filter = 6 // PCSS
+shadowGen.filteringQuality = 0 // Low
 
 // ── Camera (mobile touch: pinch-zoom, one-finger rotate, two-finger pan) ──
 const camera = new ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 3, 25, Vector3.Zero(), scene)
@@ -87,7 +108,8 @@ function isTransparentMaterial(mat) {
 }
 
 // ── Load GLB & apply lightmap to UV2 ─────────────────────────────
-const modelUrl = `${base}models/hotel-01.glb`
+// const modelUrl = `${base}models/hotel-01.glb`
+const modelUrl = `${base}models/island-02.glb`
 
 ImportMeshAsync(modelUrl, scene).then((result) => {
   // Frame camera on bounding box
@@ -107,7 +129,8 @@ ImportMeshAsync(modelUrl, scene).then((result) => {
   const lightmap = new Texture(`${base}models/LightMap-baked.png`, scene, false, false)
   lightmap.coordinatesIndex = 1   // UV2 (glTF TEXCOORD_1)
 
-  // Apply lightmap only to opaque meshes — skip transparent materials (glass, etc.)
+
+  // Apply lightmap and enable shadows for opaque meshes
   let applied = 0
   let skipped = 0
   for (const mesh of result.meshes) {
@@ -120,6 +143,9 @@ ImportMeshAsync(modelUrl, scene).then((result) => {
     mesh.material.lightmapTexture = lightmap
     mesh.material.useLightmapAsShadowmap = true
     mesh.material.lightmapTexture.level = 1.0
+    // Enable shadow casting/receiving
+    mesh.receiveShadows = true
+    shadowGen.addShadowCaster(mesh)
     applied++
   }
 
