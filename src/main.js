@@ -109,7 +109,7 @@ function isTransparentMaterial(mat) {
 
 // ── Load GLB & apply lightmap to UV2 ─────────────────────────────
 // const modelUrl = `${base}models/hotel-01.glb`
-const modelUrl = `${base}models/island-02.glb`
+const modelUrl = `${base}models/island-04.glb`
 
 ImportMeshAsync(modelUrl, scene).then((result) => {
   // Frame camera on bounding box
