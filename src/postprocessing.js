@@ -32,6 +32,7 @@ export function setupPostProcessing(scene, camera) {
     pipeline.imageProcessing.colorCurvesEnabled = true
     const curves = new ColorCurves()
     curves.globalSaturation = ip.saturationBoost
+    curves.midtonesHue = 0.2 // slight hue shift towards blue/cyan to enhance sky colors
     pipeline.imageProcessing.colorCurves = curves
   }
 
