@@ -1,290 +1,87 @@
+/**
+ * main.js — Orchestrator only.
+ * All logic lives in dedicated modules; settings in constants.js.
+ */
 import './style.css'
 import modelFiles from 'virtual:model-list'
 
-import { Engine }           from '@babylonjs/core/Engines/engine'
-import { Scene }            from '@babylonjs/core/scene'
-import { ArcRotateCamera }  from '@babylonjs/core/Cameras/arcRotateCamera'
-import { Vector3 }          from '@babylonjs/core/Maths/math.vector'
-import { Color3, Color4 }   from '@babylonjs/core/Maths/math.color'
-import { CreateBox }        from '@babylonjs/core/Meshes/Builders/boxBuilder'
-import { TransformNode }    from '@babylonjs/core/Meshes/transformNode'
-import { ImportMeshAsync }  from '@babylonjs/core/Loading/sceneLoader'
-import { DynamicTexture }   from '@babylonjs/core/Materials/Textures/dynamicTexture'
-import { LensFlareSystem }  from '@babylonjs/core/LensFlares/lensFlareSystem'
-import { LensFlare }        from '@babylonjs/core/LensFlares/lensFlare'
-import { SkyMaterial }      from '@babylonjs/materials/sky'
-
-import '@babylonjs/loaders/glTF'
+import { Engine }      from '@babylonjs/core/Engines/engine'
+import { Scene }       from '@babylonjs/core/scene'
+import { CubeTexture } from '@babylonjs/core/Materials/Textures/cubeTexture'
 import '@babylonjs/core/Debug/debugLayer'
-import '@babylonjs/core/LensFlares/lensFlareSystemSceneComponent'
 
-const base = import.meta.env.BASE_URL
+import { SETTINGS }                    from './constants'
+import { setupCamera, frameCamera }    from './camera'
+import { setupSky }                    from './sky'
+import { setupFog }                    from './fog'
+import { setupPostProcessing }         from './postprocessing'
+import { createWaterMaterial, applyWater } from './water'
+import { loadAllModels }               from './modelLoader'
+import { createHUD }                   from './hud'
 
-// ── Inspector (F8) ───────────────────────────────────────────────
+const base       = import.meta.env.BASE_URL
+const MODEL_NAMES = modelFiles.map(f => f.replace(/\.glb$/i, ''))
+
+// ── Inspector (dynamic import, F8 toggle) ────────────────────
 let inspectorReady = false
-import('@babylonjs/inspector').then(() => {
-  inspectorReady = true
-  console.log('Inspector ready — press F8 to toggle')
-})
+import('@babylonjs/inspector').then(() => { inspectorReady = true })
 
-// ── Engine & Scene ──────────────────────────────────────────────
+// ── Engine & Scene ───────────────────────────────────────────
 const canvas = document.getElementById('renderCanvas')
 const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true }, true)
 const scene  = new Scene(engine)
 
-// ── Sky (SkyMaterial — procedural, no texture file needed) ──────
-// Sun placed at ~8° above the horizon, directly in front of the default camera (+Z).
-// Adjust SUN_POS to reposition the sun disc and the lens flare together.
-const SUN_POS = new Vector3(0, 100, 700)
-
-const skyMat = new SkyMaterial('sky', scene)
-skyMat.backFaceCulling  = false
-skyMat.turbidity        = 3       // atmospheric haze (lower = cleaner/bluer)
-skyMat.luminance        = 1.0
-skyMat.mieCoefficient   = 0.005   // sun halo width
-skyMat.mieDirectionalG  = 0.98   // sun halo sharpness
-skyMat.rayleigh         = 1.0    // blue-sky scatter (lower = lighter, more stylized)
-skyMat.useSunPosition   = true
-skyMat.sunPosition      = SUN_POS
-skyMat.fogEnabled       = false   // sky must never be fogged out
-
-const skybox = CreateBox('skyBox', { size: 3000 }, scene)
-skybox.material         = skyMat
-skybox.isPickable       = false
-skybox.infiniteDistance = true    // always centred on camera
-
-// ── Fog (hides the hard horizon edge) ───────────────────────────
-scene.fogMode    = Scene.FOGMODE_EXP2
-scene.fogColor   = new Color3(0.80, 0.90, 1.00)   // hazy blue-white
-scene.fogDensity = 0.0025
-// Clear colour matches fog so the very far sky seam is invisible
-scene.clearColor = new Color4(0.80, 0.90, 1.00, 1.0)
-
-// ── Lens Flare ───────────────────────────────────────────────────
-// Textures are procedural (radial gradients on DynamicTexture — no files needed)
-function makeFlareTex(size, stops) {
-  const dt = new DynamicTexture(`_ft${size}`, { width: size, height: size }, scene)
-  dt.hasAlpha = true
-  const ctx = dt.getContext()
-  ctx.clearRect(0, 0, size, size)
-  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-  stops.forEach(([t, c]) => g.addColorStop(t, c))
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, size, size)
-  dt.update()
-  return dt
-}
-
-const sunEmitter = new TransformNode('sunEmitter', scene)
-sunEmitter.position = SUN_POS.clone()
-const lfs = new LensFlareSystem('sunFlare', sunEmitter, scene)
-lfs.borderLimit = 50     // allow flare within 50 px of screen edge (default is 300)
-
-// Sun disc + warm glow
-const sunTex = makeFlareTex(256, [
-  [0,    'rgba(255,255,220,1.0)'],
-  [0.05, 'rgba(255,220,120,0.9)'],
-  [0.20, 'rgba(255,170,50,0.45)'],
-  [0.50, 'rgba(255,130,20,0.12)'],
-  [1,    'rgba(0,0,0,0)'],
-])
-;(new LensFlare(0.30, 0, new Color3(1.00, 0.95, 0.78), '', lfs)).texture = sunTex
-
-// Wide soft corona ring
-const coronaTex = makeFlareTex(256, [
-  [0,    'rgba(0,0,0,0)'],
-  [0.32, 'rgba(255,200,70,0)'],
-  [0.44, 'rgba(255,195,65,0.22)'],
-  [0.56, 'rgba(255,200,70,0)'],
-  [1,    'rgba(0,0,0,0)'],
-])
-;(new LensFlare(0.50, 0, new Color3(1.00, 0.82, 0.35), '', lfs)).texture = coronaTex
-
-// Scattered lens artefacts along the screen-centre axis
-const artTex = makeFlareTex(64, [
-  [0,   'rgba(190,205,255,0.9)'],
-  [0.5, 'rgba(130,155,240,0.3)'],
-  [1,   'rgba(0,0,0,0)'],
-])
-;[
-  [0.10, 0.25, new Color3(0.65, 0.72, 1.00)],
-  [0.13, 0.44, new Color3(0.55, 0.80, 1.00)],
-  [0.07, 0.63, new Color3(0.80, 1.00, 0.55)],
-  [0.15, 0.84, new Color3(1.00, 0.75, 0.40)],
-  [0.09, 1.10, new Color3(0.90, 0.55, 1.00)],
-].forEach(([sz, pos, col]) => {
-  ;(new LensFlare(sz, pos, col, '', lfs)).texture = artTex
-})
-
-// ── Camera ──────────────────────────────────────────────────────
-const camera = new ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 3, 100, Vector3.Zero(), scene)
-camera.attachControl(canvas, true)
-camera.lowerRadiusLimit   = 2
-camera.upperRadiusLimit   = 800
-camera.wheelPrecision     = 10
-camera.pinchPrecision     = 20
-camera.panningSensibility = 100
-camera.minZ               = 0.1
-
-window.__scene = scene
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'F8' && inspectorReady) {
-    if (scene.debugLayer.isVisible()) {
-      scene.debugLayer.hide()
-    } else {
-      scene.debugLayer.show({ embedMode: true, showExplorer: true, showInspector: true })
-    }
-  }
-})
-
-// ── Make a material unlit — keeps all textures, skips all lighting ─
-function makeUnlit(mat) {
-  if (!mat) return
-  if ('unlit' in mat) { mat.unlit = true; return }          // PBRMaterial (all GLB/glTF)
-  if ('disableLighting' in mat) mat.disableLighting = true   // StandardMaterial fallback
-}
-
-// ── Model list — auto-discovered by the virtual:model-list Vite plugin ──
-// Drop any .glb into public/models/ and it appears here automatically.
-const MODEL_NAMES = modelFiles.map(f => f.replace(/\.glb$/i, ''))
-
-// ── Performance HUD ─────────────────────────────────────────────
-const hud = document.createElement('div')
-hud.style.cssText = [
-  'position:fixed', 'top:10px', 'right:10px', 'z-index:100',
-  'background:rgba(0,0,0,0.72)', 'color:#fff', 'font:13px/1.6 monospace',
-  'border-radius:8px', 'padding:10px 14px', 'min-width:250px',
-  'max-height:90vh', 'overflow-y:auto', 'user-select:none',
-  'box-shadow:0 2px 12px rgba(0,0,0,0.5)',
-].join(';')
-document.body.appendChild(hud)
-
-// name → { refs: Mesh[], triCount: number, meshCount: number, visible: boolean }
-const modelData = {}
-let allLoaded = false
-
-function fmtK(n) { return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n) }
-
-function renderHUD(fps) {
-  const fpsStr = fps !== undefined ? fps.toFixed(1) : '…'
-  const activeMeshes = scene.getActiveMeshes().length
-
-  let html = `<div style="font-size:15px;font-weight:bold">FPS: ${fpsStr}</div>`
-  html += `<div style="color:#aaa;font-size:11px">active meshes: ${activeMeshes}</div>`
-  html += `<hr style="border:none;border-top:1px solid #444;margin:6px 0">`
-
-  if (!allLoaded) {
-    const done = Object.keys(modelData).length
-    html += `<div style="color:#aaa">Loading… ${done}/${MODEL_NAMES.length}</div>`
-    for (const name of MODEL_NAMES) {
-      const d = modelData[name]
-      const state = !d ? '⏳' : d.error ? '❌' : '✔'
-      html += `<div>${state} ${name}</div>`
-    }
-  } else {
-    let totalTris = 0, totalMeshes = 0
-    for (const name of MODEL_NAMES) {
-      const d = modelData[name]
-      if (!d || d.error) { html += `<div style="color:#f66">❌ ${name}</div>`; continue }
-      if (d.visible) { totalTris += d.triCount; totalMeshes += d.meshCount }
-
-      const triBar  = Math.round((d.triCount / Math.max(...MODEL_NAMES.map(n => modelData[n]?.triCount || 0))) * 60)
-      const barHTML = `<div style="height:3px;width:${triBar}px;background:#4af;margin:1px 0 3px"></div>`
-      const btnStyle = `cursor:pointer;padding:2px 8px;font-size:11px;min-height:28px;`
-        + `background:${d.visible ? '#1a4a1a' : '#333'};color:${d.visible ? '#6f6' : '#aaa'};`
-        + `border:1px solid ${d.visible ? '#3a8a3a' : '#555'};border-radius:4px`
-      html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">`
-        + `<button data-m="${name}" style="${btnStyle}">${d.visible ? 'ON' : 'OFF'}</button>`
-        + `<div><b>${name}</b><br><span style="color:#aaa;font-size:11px">${d.meshCount} meshes · ${fmtK(d.triCount)} tris</span>${barHTML}</div>`
-        + `</div>`
-    }
-    html += `<hr style="border:none;border-top:1px solid #444;margin:6px 0">`
-    html += `<div style="color:#aaa;font-size:11px">visible: ${totalMeshes} meshes · ${fmtK(totalTris)} tris</div>`
-  }
-
-  hud.innerHTML = html
-
-  hud.querySelectorAll('button[data-m]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const d = modelData[btn.dataset.m]
-      if (!d) return
-      d.visible = !d.visible
-      d.refs.forEach(m => m.setEnabled(d.visible))
-      renderHUD(engine.getFps())
-    })
-  })
-}
-
-renderHUD()
-
-// ── Load all models in parallel ──────────────────────────────────
-const globalMin = new Vector3(Infinity, Infinity, Infinity)
-const globalMax = new Vector3(-Infinity, -Infinity, -Infinity)
-
-const loads = MODEL_NAMES.map(name =>
-  ImportMeshAsync(`${base}models/${name}.glb`, scene)
-    .then(result => {
-      // Make every material unlit (handle MultiMaterial too)
-      const seen = new Set()
-      for (const mesh of result.meshes) {
-        const mats = mesh.material?.subMaterials ?? (mesh.material ? [mesh.material] : [])
-        for (const mat of mats) {
-          if (mat && !seen.has(mat)) { makeUnlit(mat); seen.add(mat) }
-        }
-      }
-
-      // Accumulate global bounding box
-      for (const mesh of result.meshes) {
-        if (!mesh.getBoundingInfo) continue
-        const { minimumWorld, maximumWorld } = mesh.getBoundingInfo().boundingBox
-        Vector3.CheckExtends(minimumWorld, globalMin, globalMax)
-        Vector3.CheckExtends(maximumWorld, globalMin, globalMax)
-      }
-
-      // Count unique geometry (some meshes share indices)
-      let triCount = 0
-      for (const mesh of result.meshes) {
-        triCount += mesh.getTotalIndices?.() ?? 0
-      }
-      triCount = Math.round(triCount / 3)
-
-      modelData[name] = { refs: result.meshes, triCount, meshCount: result.meshes.length, visible: true }
-      console.log(`✔ ${name}: ${result.meshes.length} meshes · ${fmtK(triCount)} tris`)
-      renderHUD(engine.getFps())
-    })
-    .catch(err => {
-      console.error(`✘ ${name}:`, err)
-      modelData[name] = { refs: [], triCount: 0, meshCount: 0, visible: false, error: true }
-      renderHUD(engine.getFps())
-    })
+// IBL env map — ignored by unlit materials, used by water PBR reflections
+scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(
+  `${base}textures/environmentSpecular.env`, scene,
 )
+scene.environmentIntensity = 1.0
 
-Promise.all(loads).then(() => {
-  allLoaded = true
-  if (globalMin.x !== Infinity) {
-    camera.target = Vector3.Center(globalMin, globalMax)
-    const span = Vector3.Distance(globalMin, globalMax)
-    camera.radius = span * 0.7
-    camera.upperRadiusLimit = span * 3
+// ── Scene modules ────────────────────────────────────────────
+const camera   = setupCamera(scene, canvas)
+const skybox   = setupSky(scene)
+setupFog(scene)
+setupPostProcessing(scene, camera)
+const waterMat = createWaterMaterial(scene)
+
+// ── Inspector toggle ─────────────────────────────────────────
+window.__scene = scene
+window.addEventListener('keydown', e => {
+  if (e.key === 'F8' && inspectorReady) {
+    scene.debugLayer.isVisible()
+      ? scene.debugLayer.hide()
+      : scene.debugLayer.show({ embedMode: true, showExplorer: true, showInspector: true })
   }
-  // Reset to a consistent view that faces the sun (+Z direction)
-  camera.alpha = -Math.PI / 2
-  camera.beta  = 1.1     // 63° from top — slightly above horizontal
-  renderHUD(engine.getFps())
+})
+
+// ── HUD ──────────────────────────────────────────────────────
+const hud = createHUD(engine, scene, MODEL_NAMES)
+hud.update()
+
+// ── Load models ──────────────────────────────────────────────
+loadAllModels(scene, base, MODEL_NAMES, {
+  skipUnlit: SETTINGS.water.enabled ? [SETTINGS.water.modelName] : [],
+  onProgress(name, data) { hud.update(engine.getFps(), data, false) },
+}).then(({ modelData, globalMin, globalMax }) => {
+  frameCamera(camera, globalMin, globalMax)
+
+  // Apply water material to pool-water meshes
+  const waterModel = modelData[SETTINGS.water.modelName]
+  if (waterMat && waterModel) applyWater(waterMat, waterModel.refs, skybox)
+
+  hud.update(engine.getFps(), modelData, true)
   console.log('All models loaded.')
 })
 
-// ── Render loop & resize ─────────────────────────────────────────
+// ── Render loop ──────────────────────────────────────────────
 let tick = 0
 engine.runRenderLoop(() => {
   scene.render()
-  if (++tick % 30 === 0) renderHUD(engine.getFps())
+  if (++tick % 30 === 0) hud.update(engine.getFps())
 })
 window.addEventListener('resize', () => engine.resize())
 
-// ── HMR cleanup — dispose old WebGL context on hot reload ────────
+// ── HMR ──────────────────────────────────────────────────────
 if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
-    engine.dispose()
-  })
+  import.meta.hot.dispose(() => engine.dispose())
 }
