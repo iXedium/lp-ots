@@ -1,14 +1,22 @@
 import './style.css'
+import modelFiles from 'virtual:model-list'
 
-import { Engine }          from '@babylonjs/core/Engines/engine'
-import { Scene }           from '@babylonjs/core/scene'
-import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera'
-import { Vector3 }         from '@babylonjs/core/Maths/math.vector'
-import { Color4 }          from '@babylonjs/core/Maths/math.color'
-import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader'
+import { Engine }           from '@babylonjs/core/Engines/engine'
+import { Scene }            from '@babylonjs/core/scene'
+import { ArcRotateCamera }  from '@babylonjs/core/Cameras/arcRotateCamera'
+import { Vector3 }          from '@babylonjs/core/Maths/math.vector'
+import { Color3, Color4 }   from '@babylonjs/core/Maths/math.color'
+import { CreateBox }        from '@babylonjs/core/Meshes/Builders/boxBuilder'
+import { TransformNode }    from '@babylonjs/core/Meshes/transformNode'
+import { ImportMeshAsync }  from '@babylonjs/core/Loading/sceneLoader'
+import { DynamicTexture }   from '@babylonjs/core/Materials/Textures/dynamicTexture'
+import { LensFlareSystem }  from '@babylonjs/core/LensFlares/lensFlareSystem'
+import { LensFlare }        from '@babylonjs/core/LensFlares/lensFlare'
+import { SkyMaterial }      from '@babylonjs/materials/sky'
 
 import '@babylonjs/loaders/glTF'
 import '@babylonjs/core/Debug/debugLayer'
+import '@babylonjs/core/LensFlares/lensFlareSystemSceneComponent'
 
 const base = import.meta.env.BASE_URL
 
@@ -19,13 +27,94 @@ import('@babylonjs/inspector').then(() => {
   console.log('Inspector ready — press F8 to toggle')
 })
 
-// ── Canvas & Engine ──────────────────────────────────────────────
+// ── Engine & Scene ──────────────────────────────────────────────
 const canvas = document.getElementById('renderCanvas')
 const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true }, true)
+const scene  = new Scene(engine)
 
-// ── Scene ────────────────────────────────────────────────────────
-const scene = new Scene(engine)
-scene.clearColor = new Color4(0.53, 0.81, 0.92, 1.0)
+// ── Sky (SkyMaterial — procedural, no texture file needed) ──────
+// Sun placed at ~8° above the horizon, directly in front of the default camera (+Z).
+// Adjust SUN_POS to reposition the sun disc and the lens flare together.
+const SUN_POS = new Vector3(0, 100, 700)
+
+const skyMat = new SkyMaterial('sky', scene)
+skyMat.backFaceCulling  = false
+skyMat.turbidity        = 3       // atmospheric haze (lower = cleaner/bluer)
+skyMat.luminance        = 1.0
+skyMat.mieCoefficient   = 0.005   // sun halo width
+skyMat.mieDirectionalG  = 0.98   // sun halo sharpness
+skyMat.rayleigh         = 1.0    // blue-sky scatter (lower = lighter, more stylized)
+skyMat.useSunPosition   = true
+skyMat.sunPosition      = SUN_POS
+skyMat.fogEnabled       = false   // sky must never be fogged out
+
+const skybox = CreateBox('skyBox', { size: 3000 }, scene)
+skybox.material         = skyMat
+skybox.isPickable       = false
+skybox.infiniteDistance = true    // always centred on camera
+
+// ── Fog (hides the hard horizon edge) ───────────────────────────
+scene.fogMode    = Scene.FOGMODE_EXP2
+scene.fogColor   = new Color3(0.80, 0.90, 1.00)   // hazy blue-white
+scene.fogDensity = 0.0025
+// Clear colour matches fog so the very far sky seam is invisible
+scene.clearColor = new Color4(0.80, 0.90, 1.00, 1.0)
+
+// ── Lens Flare ───────────────────────────────────────────────────
+// Textures are procedural (radial gradients on DynamicTexture — no files needed)
+function makeFlareTex(size, stops) {
+  const dt = new DynamicTexture(`_ft${size}`, { width: size, height: size }, scene)
+  dt.hasAlpha = true
+  const ctx = dt.getContext()
+  ctx.clearRect(0, 0, size, size)
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  stops.forEach(([t, c]) => g.addColorStop(t, c))
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, size, size)
+  dt.update()
+  return dt
+}
+
+const sunEmitter = new TransformNode('sunEmitter', scene)
+sunEmitter.position = SUN_POS.clone()
+const lfs = new LensFlareSystem('sunFlare', sunEmitter, scene)
+lfs.borderLimit = 50     // allow flare within 50 px of screen edge (default is 300)
+
+// Sun disc + warm glow
+const sunTex = makeFlareTex(256, [
+  [0,    'rgba(255,255,220,1.0)'],
+  [0.05, 'rgba(255,220,120,0.9)'],
+  [0.20, 'rgba(255,170,50,0.45)'],
+  [0.50, 'rgba(255,130,20,0.12)'],
+  [1,    'rgba(0,0,0,0)'],
+])
+;(new LensFlare(0.30, 0, new Color3(1.00, 0.95, 0.78), '', lfs)).texture = sunTex
+
+// Wide soft corona ring
+const coronaTex = makeFlareTex(256, [
+  [0,    'rgba(0,0,0,0)'],
+  [0.32, 'rgba(255,200,70,0)'],
+  [0.44, 'rgba(255,195,65,0.22)'],
+  [0.56, 'rgba(255,200,70,0)'],
+  [1,    'rgba(0,0,0,0)'],
+])
+;(new LensFlare(0.50, 0, new Color3(1.00, 0.82, 0.35), '', lfs)).texture = coronaTex
+
+// Scattered lens artefacts along the screen-centre axis
+const artTex = makeFlareTex(64, [
+  [0,   'rgba(190,205,255,0.9)'],
+  [0.5, 'rgba(130,155,240,0.3)'],
+  [1,   'rgba(0,0,0,0)'],
+])
+;[
+  [0.10, 0.25, new Color3(0.65, 0.72, 1.00)],
+  [0.13, 0.44, new Color3(0.55, 0.80, 1.00)],
+  [0.07, 0.63, new Color3(0.80, 1.00, 0.55)],
+  [0.15, 0.84, new Color3(1.00, 0.75, 0.40)],
+  [0.09, 1.10, new Color3(0.90, 0.55, 1.00)],
+].forEach(([sz, pos, col]) => {
+  ;(new LensFlare(sz, pos, col, '', lfs)).texture = artTex
+})
 
 // ── Camera ──────────────────────────────────────────────────────
 const camera = new ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 3, 100, Vector3.Zero(), scene)
@@ -35,7 +124,7 @@ camera.upperRadiusLimit   = 800
 camera.wheelPrecision     = 10
 camera.pinchPrecision     = 20
 camera.panningSensibility = 100
-camera.minZ = 0.1
+camera.minZ               = 0.1
 
 window.__scene = scene
 window.addEventListener('keydown', (e) => {
@@ -55,8 +144,9 @@ function makeUnlit(mat) {
   if ('disableLighting' in mat) mat.disableLighting = true   // StandardMaterial fallback
 }
 
-// ── Models ───────────────────────────────────────────────────────
-const MODEL_NAMES = ['buildings', 'curbs', 'extra', 'pool-water', 'props', 'under-water', 'water']
+// ── Model list — auto-discovered by the virtual:model-list Vite plugin ──
+// Drop any .glb into public/models/ and it appears here automatically.
+const MODEL_NAMES = modelFiles.map(f => f.replace(/\.glb$/i, ''))
 
 // ── Performance HUD ─────────────────────────────────────────────
 const hud = document.createElement('div')
@@ -177,6 +267,9 @@ Promise.all(loads).then(() => {
     camera.radius = span * 0.7
     camera.upperRadiusLimit = span * 3
   }
+  // Reset to a consistent view that faces the sun (+Z direction)
+  camera.alpha = -Math.PI / 2
+  camera.beta  = 1.1     // 63° from top — slightly above horizontal
   renderHUD(engine.getFps())
   console.log('All models loaded.')
 })
