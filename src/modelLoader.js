@@ -1,37 +1,45 @@
 import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader'
 import { Vector3 }        from '@babylonjs/core/Maths/math.vector'
 import '@babylonjs/loaders/glTF'
+import { PilmiShelvesLoader } from './pilmiShelvesLoader'
 
-function makeUnlit(mat) {
+export function makeLit(mat) {
   if (!mat) return
-  if ('unlit' in mat)             { mat.unlit = true; return }
-  if ('disableLighting' in mat)     mat.disableLighting = true
+  if ('unlit' in mat) mat.unlit = false
+  if ('disableLighting' in mat) mat.disableLighting = false
+  if ('environmentIntensity' in mat && (!mat.environmentIntensity || mat.environmentIntensity < 0.8)) {
+    mat.environmentIntensity = 1.0
+  }
 }
+
 
 function fmtK(n) { return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n) }
 
 /**
  * Load every GLB in parallel.
  * @param {string[]}  modelNames  basenames without .glb
- * @param {string[]}  skipUnlit   model names whose materials should NOT be set to unlit
+ * @param {string[]}  skipMakeLit model names whose materials should NOT be forced lit
  * @param {Function}  onProgress  called after each model: (name, modelData)
  * @returns {{ modelData, globalMin, globalMax }}
  */
-export async function loadAllModels(scene, base, modelNames, { skipUnlit = [], onProgress } = {}) {
+export async function loadAllModels(scene, base, modelNames, { skipMakeLit = [], onProgress } = {}) {
   const modelData = {}
   const globalMin = new Vector3(Infinity, Infinity, Infinity)
   const globalMax = new Vector3(-Infinity, -Infinity, -Infinity)
+  const devQuery = import.meta.env.DEV ? `?v=${Date.now()}` : ''
 
   const loads = modelNames.map(name =>
-    ImportMeshAsync(`${base}models/${name}.glb`, scene)
+    (name === 'deli-int-shelves'
+      ? new PilmiShelvesLoader(scene, `${base}`).load()
+      : ImportMeshAsync(`${base}models/${name}.glb${devQuery}`, scene))
       .then(result => {
-        // Make materials unlit unless excluded
-        if (!skipUnlit.includes(name)) {
+        // Ensure materials are lit for proper metallic/roughness/glass response.
+        if (!skipMakeLit.includes(name)) {
           const seen = new Set()
           for (const mesh of result.meshes) {
             const mats = mesh.material?.subMaterials ?? (mesh.material ? [mesh.material] : [])
             for (const mat of mats) {
-              if (mat && !seen.has(mat)) { makeUnlit(mat); seen.add(mat) }
+              if (mat && !seen.has(mat)) { makeLit(mat); seen.add(mat) }
             }
           }
         }
@@ -51,7 +59,13 @@ export async function loadAllModels(scene, base, modelNames, { skipUnlit = [], o
         }
         triCount = Math.round(triCount / 3)
 
-        modelData[name] = { refs: result.meshes, triCount, meshCount: result.meshes.length, visible: true }
+        modelData[name] = {
+          refs: result.meshes,
+          shadowCasters: result.meshes.filter(m => m?.isMesh && !m.isAnInstance),
+          triCount,
+          meshCount: result.meshes.length,
+          visible: true,
+        }
         console.log(`✔ ${name}: ${result.meshes.length} meshes · ${fmtK(triCount)} tris`)
         onProgress?.(name, modelData)
       })

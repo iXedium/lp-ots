@@ -16,11 +16,14 @@ import { setupSky }                    from './sky'
 import { setupFog }                    from './fog'
 import { setupPostProcessing }         from './postprocessing'
 import { createWaterMaterial, applyWater } from './water'
+import { setupLighting, applyShadows } from './lighting'
 import { loadAllModels }               from './modelLoader'
 import { createHUD }                   from './hud'
 
 const base       = import.meta.env.BASE_URL
+// PILMI TEST: only load shelves (restore full list when done)
 const MODEL_NAMES = modelFiles.map(f => f.replace(/\.glb$/i, ''))
+  .filter(n => n === 'deli-int-shelves')
 
 // ── Inspector (dynamic import, F8 toggle) ────────────────────
 let inspectorReady = false
@@ -28,7 +31,7 @@ import('@babylonjs/inspector').then(() => { inspectorReady = true })
 
 // ── Engine & Scene ───────────────────────────────────────────
 const canvas = document.getElementById('renderCanvas')
-const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true }, true)
+const engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true }, true)
 const scene  = new Scene(engine)
 
 // IBL env map — ignored by unlit materials, used by water PBR reflections
@@ -41,6 +44,7 @@ scene.environmentIntensity = 1.0
 const camera   = setupCamera(scene, canvas)
 const skybox   = setupSky(scene)
 setupFog(scene)
+const lights = setupLighting(scene)
 setupPostProcessing(scene, camera)
 const waterMat = createWaterMaterial(scene)
 
@@ -60,10 +64,12 @@ hud.update()
 
 // ── Load models ──────────────────────────────────────────────
 loadAllModels(scene, base, MODEL_NAMES, {
-  skipUnlit: SETTINGS.water.enabled ? [SETTINGS.water.modelName] : [],
+  skipMakeLit: SETTINGS.water.enabled ? [SETTINGS.water.modelName] : [],
   onProgress(name, data) { hud.update(engine.getFps(), data, false) },
 }).then(({ modelData, globalMin, globalMax }) => {
   frameCamera(camera, globalMin, globalMax)
+
+  if (lights?.shadowGen) applyShadows(modelData, lights.shadowGen)
 
   // Apply water material to pool-water meshes
   const waterModel = modelData[SETTINGS.water.modelName]

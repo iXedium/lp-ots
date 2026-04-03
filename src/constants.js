@@ -19,7 +19,7 @@ export const SETTINGS = {
     upperRadiusLimit: 250,
     wheelPrecision:   3,                  // lower = faster zoom
     pinchPrecision:   8,
-    panningSensibility: 0,                // 0 = orbit only, no panning
+    panningSensibility: 200,              // RMB to pan; higher = slower
     minZ: 0.1,
   },
 
@@ -41,7 +41,7 @@ export const SETTINGS = {
 
   // ── Fog (horizon haze only) ──────────────────────────────────
   fog: {
-    enabled: true,
+    enabled: false,
     density: 0.0008,                      // very low — near objects stay clear
     color: { r: 0.60, g: 0.82, b: 0.95 }, // matches sky horizon for seamless blending
   },
@@ -51,7 +51,7 @@ export const SETTINGS = {
     enabled: true,
 
     bloom: {
-      enabled:   true,
+      enabled:   false,
       threshold: 0.8,
       weight:    0.35,
       kernel:    64,
@@ -61,7 +61,7 @@ export const SETTINGS = {
     imageProcessing: {
       contrast:            1.3,
       exposure:            1.15,
-      toneMappingEnabled:  false,           // disabled: sky shader is LDR, models are unlit
+      toneMappingEnabled:  true,
       toneMappingType:     1,             // 0 = standard (better color), 1 = ACES
       saturationBoost:     50,            // ColorCurves globalSaturation
     },
@@ -76,7 +76,7 @@ export const SETTINGS = {
 
   // ── Pool water material ──────────────────────────────────────
   water: {
-    enabled: true,
+    enabled: false,
     modelName: 'pool-water',              // GLB filename (sans extension)
     color:     { r: 0.01, g: 0.55, b: 0.68 },
     windForce:       -3,
@@ -85,6 +85,24 @@ export const SETTINGS = {
     bumpHeight:      0.25,
     colorBlendFactor: 0.25,
     renderTargetSize: 128,                // px — keep low for iPad
+  },
+
+  // ── PILMI test controls ─────────────────────────────────────
+  pilmi: {
+    modelName: 'deli-int-shelves',
+  },
+
+  // ── Lighting / shadows ───────────────────────────────────────
+  lighting: {
+    enabled: true,
+    ambientIntensity: 0.45,
+    sunDirection: { x: -0.7, y: -1.0, z: -0.45 },
+    sunPosition:  { x: 180, y: 260, z: 140 },
+    sunIntensity: 3.2,
+    shadowMapSize: 2048,
+    shadowBias: 0.00008,
+    normalBias: 0.01,
+    darkness: 0.25,
   },
 
   // ── HUD / Performance overlay ────────────────────────────────

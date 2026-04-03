@@ -1,6 +1,13 @@
 import { SETTINGS } from './constants'
 
 function fmtK(n) { return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n) }
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
 
 /**
  * Collapsible performance overlay.
@@ -49,6 +56,19 @@ export function createHUD(engine, scene, modelNames) {
     panel.style.display = expanded ? '' : 'none'
   })
 
+  // Use pointerdown delegation so toggles stay reliable while panel HTML refreshes.
+  panel.addEventListener('pointerdown', (e) => {
+    const toggle = e.target.closest('button[data-m]')
+    if (!toggle) return
+    e.preventDefault()
+    e.stopPropagation()
+    const d = currentModelData[toggle.dataset.m]
+    if (!d) return
+    d.visible = !d.visible
+    d.refs.forEach(m => m.setEnabled(d.visible))
+    update(engine.getFps(), null)
+  })
+
   // ── Render panel contents ───────────────────────────────────
   function update(fps, data, loaded) {
     if (data) Object.assign(currentModelData, data)
@@ -88,8 +108,8 @@ export function createHUD(engine, scene, modelNames) {
           + `border:1px solid ${vis ? '#3a8a3a' : '#555'};border-radius:4px`
 
         html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">`
-          + `<button data-m="${name}" style="${bStyle}">${vis ? 'ON' : 'OFF'}</button>`
-          + `<div><b>${name}</b><br>`
+            + `<button data-m="${esc(name)}" style="${bStyle}">${vis ? 'ON' : 'OFF'}</button>`
+          + `<div><b>${esc(name)}</b><br>`
           + `<span style="color:#aaa;font-size:11px">${d.meshCount} meshes · ${fmtK(d.triCount)} tris</span>`
           + `<div style="${barCSS}"></div></div></div>`
       }
@@ -100,15 +120,6 @@ export function createHUD(engine, scene, modelNames) {
 
     panel.innerHTML = html
 
-    panel.querySelectorAll('button[data-m]').forEach(b => {
-      b.addEventListener('click', () => {
-        const d = currentModelData[b.dataset.m]
-        if (!d) return
-        d.visible = !d.visible
-        d.refs.forEach(m => m.setEnabled(d.visible))
-        update(engine.getFps(), null)
-      })
-    })
   }
 
   return { update }

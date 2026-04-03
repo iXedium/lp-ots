@@ -12,6 +12,14 @@ const VIRTUAL_ID  = 'virtual:model-list'
 const RESOLVED_ID = '\0' + VIRTUAL_ID
 
 function modelListPlugin() {
+  let serverRef
+  const refreshModelList = (file) => {
+    if (!serverRef || !/\.glb$/i.test(file)) return
+    const mod = serverRef.moduleGraph.getModuleById(RESOLVED_ID)
+    if (mod) serverRef.moduleGraph.invalidateModule(mod)
+    serverRef.ws.send({ type: 'full-reload' })
+  }
+
   return {
     name: 'model-list',
     resolveId(id) {
@@ -25,15 +33,12 @@ function modelListPlugin() {
       return `export default ${JSON.stringify(files)}`
     },
     configureServer(server) {
+      serverRef = server
       // Full-page reload when a new .glb is dropped into public/models
       server.watcher.add(resolve(__dirname, 'public/models'))
-      server.watcher.on('add', (file) => {
-        if (/\.glb$/i.test(file)) {
-          const mod = server.moduleGraph.getModuleById(RESOLVED_ID)
-          if (mod) server.moduleGraph.invalidateModule(mod)
-          server.ws.send({ type: 'full-reload' })
-        }
-      })
+      server.watcher.on('add', refreshModelList)
+      server.watcher.on('change', refreshModelList)
+      server.watcher.on('unlink', refreshModelList)
     },
   }
 }
@@ -41,7 +46,17 @@ function modelListPlugin() {
 export default defineConfig(({ command }) => ({
   base: command === 'serve' ? '/' : '/lp-ots/',
   optimizeDeps: {
-    include: ['@babylonjs/inspector'],
+    include: [
+      '@babylonjs/inspector',
+      '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent',
+      '@babylonjs/materials/custom/pbrCustomMaterial',
+      '@babylonjs/core/Materials/Textures/Loaders/ktxTextureLoader',
+    ],
+  },
+  server: {
+    headers: {
+      'Cache-Control': 'no-store',
+    },
   },
   plugins: [modelListPlugin()],
 }))

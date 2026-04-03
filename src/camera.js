@@ -23,7 +23,7 @@ export function setupCamera(scene, canvas) {
 /** Re-frame after all models are loaded */
 export function frameCamera(camera, min, max) {
   const c = SETTINGS.camera
-  camera.target = Vector3.Center(min, max)
+  camera.setTarget(Vector3.Center(min, max))
   const span = Vector3.Distance(min, max)
   camera.radius = Math.min(span * 0.45, c.upperRadiusLimit)
   camera.upperRadiusLimit = Math.max(span * 2, c.upperRadiusLimit)
