@@ -1,14 +1,16 @@
 /**
- * pilmiShelvesLoader.js — Per-Instance Lightmap Integration for deli-int-shelves.
+ * pilmiShelvesLoader.js — Per-Instance Lightmap Integration (PILMI).
  *
- * Each shelf instance shares geometry (and UV2) but occupies a unique region in
- * the lightmap & AO atlas textures.  The JSON provides per-instance {scale, offset}
- * that transforms the shared UV2 → atlas coordinates.
+ * Handles any model whose GLB is named "pilmi-{name}.glb".  The expected
+ * companion files (all under public/) are:
+ *   textures/{name}_lm.ktx2  (or .png fallback)   — baked lightmap atlas
+ *   textures/{name}_ao.ktx2  (or .png fallback)   — ambient-occlusion atlas
+ *   json/{name}_lightmap_data.json                 — per-instance UV scale+offset
  *
- * Uses PBRCustomMaterial so that:
- *   1. lightmapTexture & ambientTexture are standard PBR slots (inspector-visible).
- *   2. vMainUV2 (and per-texture UV varyings) are overridden per-instance in the
- *      vertex shader via an instanced attribute (lmScaleOffset).
+ * Each instance shares geometry UV2 but occupies a unique region on the atlas.
+ * The JSON provides per-instance {scale, offset} in Blender UV space; the loader
+ * bakes axis-flip and UV-range normalisation into the instanced lmScaleOffset
+ * attribute so the vertex shader stays a simple fused-multiply-add.
  */
 
 import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader'
@@ -154,21 +156,33 @@ function convertDuplicatesToInstances(meshes) {
 
 /* ── loader ───────────────────────────────────────────────── */
 
-export class PilmiShelvesLoader {
-  constructor(scene, base) {
-    this.scene = scene
-    this.base  = base
+export class PilmiLoader {
+  /**
+   * @param {BABYLON.Scene} scene
+   * @param {string}        base       BASE_URL from import.meta.env
+   * @param {string}        pilmiName  the part after "pilmi-" in the GLB filename
+   */
+  constructor(scene, base, pilmiName) {
+    this.scene     = scene
+    this.base      = base
+    this.pilmiName = pilmiName
   }
 
   async load() {
-    const q = import.meta.env.DEV ? '?v=' + Date.now() : ''
+    const q    = import.meta.env.DEV ? '?v=' + Date.now() : ''
+    const name = this.pilmiName
+
+    // Try per-model JSON first, fall back to the legacy single-file name
+    const jsonUrl     = this.base + 'json/' + name + '_lightmap_data.json' + q
+    const jsonFallback = this.base + 'json/lightmap_data.json' + q
+    const fetchJson = (url) =>
+      fetch(url, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)
 
     const [result, lmTex, aoTex, lmData] = await Promise.all([
-      ImportMeshAsync(this.base + 'models/deli-int-shelves.glb' + q, this.scene),
-      loadAtlasWithFallback(this.scene, this.base + 'textures/deli-int-shelves_lm'),
-      loadAtlasWithFallback(this.scene, this.base + 'textures/deli-int-shelves_ao'),
-      fetch(this.base + 'json/lightmap_data.json' + q, { cache: 'no-store' })
-        .then(function (r) { return r.ok ? r.json() : {} }).catch(function () { return {} }),
+      ImportMeshAsync(this.base + 'models/pilmi-' + name + '.glb' + q, this.scene),
+      loadAtlasWithFallback(this.scene, this.base + 'textures/' + name + '_lm'),
+      loadAtlasWithFallback(this.scene, this.base + 'textures/' + name + '_ao'),
+      fetchJson(jsonUrl).then(d => d ?? fetchJson(jsonFallback)).then(d => d ?? {}),
     ])
 
     // Configure texture UV channel (coordinatesIndex 1 = uv2 / TEXCOORD_1)

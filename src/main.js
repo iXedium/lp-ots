@@ -21,9 +21,7 @@ import { loadAllModels }               from './modelLoader'
 import { createHUD }                   from './hud'
 
 const base       = import.meta.env.BASE_URL
-// PILMI TEST: only load shelves (restore full list when done)
 const MODEL_NAMES = modelFiles.map(f => f.replace(/\.glb$/i, ''))
-  .filter(n => n === 'deli-int-shelves')
 
 // ── Inspector (dynamic import, F8 toggle) ────────────────────
 let inspectorReady = false

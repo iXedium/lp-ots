@@ -1,7 +1,7 @@
 import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader'
 import { Vector3 }        from '@babylonjs/core/Maths/math.vector'
 import '@babylonjs/loaders/glTF'
-import { PilmiShelvesLoader } from './pilmiShelvesLoader'
+import { PilmiLoader } from './pilmiShelvesLoader'
 
 export function makeLit(mat) {
   if (!mat) return
@@ -28,13 +28,16 @@ export async function loadAllModels(scene, base, modelNames, { skipMakeLit = [],
   const globalMax = new Vector3(-Infinity, -Infinity, -Infinity)
   const devQuery = import.meta.env.DEV ? `?v=${Date.now()}` : ''
 
-  const loads = modelNames.map(name =>
-    (name === 'deli-int-shelves'
-      ? new PilmiShelvesLoader(scene, `${base}`).load()
+  const loads = modelNames.map(name => {
+    const isPilmi = name.startsWith('pilmi-')
+    const pilmiName = isPilmi ? name.slice('pilmi-'.length) : null
+
+    return (isPilmi
+      ? new PilmiLoader(scene, `${base}`, pilmiName).load()
       : ImportMeshAsync(`${base}models/${name}.glb${devQuery}`, scene))
       .then(result => {
-        // Ensure materials are lit for proper metallic/roughness/glass response.
-        if (!skipMakeLit.includes(name)) {
+        // PILMI models manage their own materials; skip makeLit for them.
+        if (!isPilmi && !skipMakeLit.includes(name)) {
           const seen = new Set()
           for (const mesh of result.meshes) {
             const mats = mesh.material?.subMaterials ?? (mesh.material ? [mesh.material] : [])
@@ -73,8 +76,8 @@ export async function loadAllModels(scene, base, modelNames, { skipMakeLit = [],
         console.error(`✘ ${name}:`, err)
         modelData[name] = { refs: [], triCount: 0, meshCount: 0, visible: false, error: true }
         onProgress?.(name, modelData)
-      }),
-  )
+      })
+  })
 
   await Promise.all(loads)
   return { modelData, globalMin, globalMax }
