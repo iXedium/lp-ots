@@ -1,4 +1,5 @@
 import { SETTINGS } from './constants'
+import { setPilmiTexture } from './pilmiShelvesLoader'
 
 function fmtK(n) { return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n) }
 function esc(s) {
@@ -59,6 +60,16 @@ export function createHUD(engine, scene, modelNames) {
   // Use pointerdown delegation so toggles stay reliable while panel HTML refreshes.
   panel.addEventListener('pointerdown', (e) => {
     const toggle = e.target.closest('button[data-m]')
+    const pilmiBtn = e.target.closest('button[data-pilmi]')
+    if (pilmiBtn) {
+      e.preventDefault()
+      e.stopPropagation()
+      const slot = pilmiBtn.dataset.pilmi
+      SETTINGS.pilmi[slot] = !SETTINGS.pilmi[slot]
+      setPilmiTexture(slot, SETTINGS.pilmi[slot])
+      update(engine.getFps(), null)
+      return
+    }
     if (!toggle) return
     e.preventDefault()
     e.stopPropagation()
@@ -116,6 +127,19 @@ export function createHUD(engine, scene, modelNames) {
 
       html += `<hr style="border:none;border-top:1px solid #444;margin:6px 0">`
       html += `<div style="color:#aaa;font-size:11px">visible: ${totalMeshes} meshes · ${fmtK(totalTris)} tris</div>`
+
+      // PILMI texture toggles
+      const lmOn = SETTINGS.pilmi.lightmap
+      const aoOn = SETTINGS.pilmi.ao
+      const pStyle = (on) => `cursor:pointer;padding:2px 8px;font-size:11px;min-height:28px;`
+        + `background:${on ? '#1a3a5a' : '#333'};color:${on ? '#6cf' : '#aaa'};`
+        + `border:1px solid ${on ? '#3a7aba' : '#555'};border-radius:4px`
+      html += `<hr style="border:none;border-top:1px solid #444;margin:6px 0">`
+      html += `<div style="color:#aaa;font-size:11px;margin-bottom:4px">PILMI textures</div>`
+      html += `<div style="display:flex;gap:6px">`
+        + `<button data-pilmi="lightmap" style="${pStyle(lmOn)}">${lmOn ? 'LM ON' : 'LM OFF'}</button>`
+        + `<button data-pilmi="ao" style="${pStyle(aoOn)}">${aoOn ? 'AO ON' : 'AO OFF'}</button>`
+        + `</div>`
     }
 
     panel.innerHTML = html

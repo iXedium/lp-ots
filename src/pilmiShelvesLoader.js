@@ -5,7 +5,7 @@
  * companion files (all under public/) are:
  *   textures/{name}_lm.ktx2  (or .png fallback)   — baked lightmap atlas
  *   textures/{name}_ao.ktx2  (or .png fallback)   — ambient-occlusion atlas
- *   json/{name}_lightmap_data.json                 — per-instance UV scale+offset
+ *   json/{name}-pilmi-data.json                    — per-instance UV scale+offset
  *
  * Each instance shares geometry UV2 but occupies a unique region on the atlas.
  * The JSON provides per-instance {scale, offset} in Blender UV space; the loader
@@ -19,6 +19,25 @@ import { Vector4 }         from '@babylonjs/core/Maths/math.vector'
 import { Mesh }            from '@babylonjs/core/Meshes/mesh'
 import '@babylonjs/core/Materials/Textures/Loaders/ktxTextureLoader'
 import { PBRCustomMaterial } from '@babylonjs/materials/custom/pbrCustomMaterial'
+import { SETTINGS } from './constants'
+
+// Global registry of all PILMI materials so textures can be toggled at runtime
+const pilmiRegistry = []
+
+/**
+ * Toggle lightmap or AO textures on all PILMI materials.
+ * @param {'lightmap'|'ao'} slot
+ * @param {boolean} enabled
+ */
+export function setPilmiTexture(slot, enabled) {
+  for (const entry of pilmiRegistry) {
+    if (slot === 'lightmap') {
+      entry.mat.lightmapTexture = enabled ? entry.lmTex : null
+    } else if (slot === 'ao') {
+      entry.mat.ambientTexture = enabled ? entry.aoTex : null
+    }
+  }
+}
 
 /* ── helpers ─────────────────────────────────────────────────── */
 
@@ -49,10 +68,10 @@ function isKtx2Data(buf) {
   )
 }
 
-function loadTexture(scene, url) {
+function loadTexture(scene, url, invertY) {
   return new Promise((resolve, reject) => {
     const tex = new Texture(
-      url, scene, true, true, Texture.TRILINEAR_SAMPLINGMODE,
+      url, scene, true, invertY, Texture.TRILINEAR_SAMPLINGMODE,
       () => resolve(tex),
       (_msg, exc) => { tex.dispose(); reject(exc || new Error(_msg || 'Failed: ' + url)) },
     )
@@ -62,17 +81,20 @@ function loadTexture(scene, url) {
 async function loadAtlasWithFallback(scene, basePathNoExt) {
   const ktx2 = basePathNoExt + '.ktx2'
   const png  = basePathNoExt + '.png'
+  // Try KTX2 first — pass URL directly so BabylonJS detects extension & uses KTX2 decoder
+  // KTX2 containers carry their own orientation, so invertY=false to avoid double-flip
   try {
-    const res = await fetch(ktx2, { cache: 'no-store' })
+    const res = await fetch(ktx2, { method: 'HEAD', cache: 'no-store' })
     if (res.ok) {
-      const data = await res.arrayBuffer()
-      if (isKtx2Data(data)) {
-        const blob = URL.createObjectURL(new Blob([data], { type: 'image/ktx2' }))
-        try { return await loadTexture(scene, blob) } finally { URL.revokeObjectURL(blob) }
-      }
+      const tex = await loadTexture(scene, ktx2, false)
+      tex._pilmiInvertY = false
+      return tex
     }
   } catch { /* fall through to PNG */ }
-  return loadTexture(scene, png)
+  // PNG needs invertY=true so V=0=bottom matches Blender convention
+  const tex = await loadTexture(scene, png, true)
+  tex._pilmiInvertY = true
+  return tex
 }
 
 /* ── material factory ─────────────────────────────────────── */
@@ -172,9 +194,8 @@ export class PilmiLoader {
     const q    = import.meta.env.DEV ? '?v=' + Date.now() : ''
     const name = this.pilmiName
 
-    // Try per-model JSON first, fall back to the legacy single-file name
-    const jsonUrl     = this.base + 'json/' + name + '_lightmap_data.json' + q
-    const jsonFallback = this.base + 'json/lightmap_data.json' + q
+    // JSON convention: public/json/{name}-pilmi-data.json
+    const jsonUrl = this.base + 'json/' + name + '-pilmi-data.json' + q
     const fetchJson = (url) =>
       fetch(url, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)
 
@@ -182,11 +203,12 @@ export class PilmiLoader {
       ImportMeshAsync(this.base + 'models/pilmi-' + name + '.glb' + q, this.scene),
       loadAtlasWithFallback(this.scene, this.base + 'textures/' + name + '_lm'),
       loadAtlasWithFallback(this.scene, this.base + 'textures/' + name + '_ao'),
-      fetchJson(jsonUrl).then(d => d ?? fetchJson(jsonFallback)).then(d => d ?? {}),
+      fetchJson(jsonUrl).then(d => d ?? {}),
     ])
 
     // Configure texture UV channel (coordinatesIndex 1 = uv2 / TEXCOORD_1)
-    // invertY=true so shader V=0 matches Blender V=0 (bottom), matching the JSON Blender-space offsets
+    // Track invertY state for V-axis formula (KTX2 vs PNG have different orientations)
+    var texInvertY = lmTex._pilmiInvertY !== undefined ? lmTex._pilmiInvertY : lmTex.invertY
     lmTex.coordinatesIndex = 1
     aoTex.coordinatesIndex = 1
     lmTex.gammaSpace = false
@@ -275,13 +297,20 @@ export class PilmiLoader {
         var su = entry.scale[0] / uvInfo.u_range
         var ou = entry.offset[0] - uvInfo.u_min * su
         // V: GLTF UV2 V is flipped from Blender (gltf_v = 1 - blender_v).
-        //    The atlas JSON offset/scale are in Blender V (0=bottom).
-        //    Result must be in Blender V so invertY=true texture samples correctly.
-        //    Formula: atlas_blender_v = (v_max_gltf - uv2_gltf_v) / v_range * scale_v + offset_v
-        //    Which expands to: uv2 * (-sv_abs) + (v_max_gltf * sv_abs + offset_v)
+        //    JSON offset/scale are in Blender V (0=bottom).
+        //    v_max = uvInfo.v_min + uvInfo.v_range (top of UV island in GLTF space)
         var sv_abs = entry.scale[1] / uvInfo.v_range
-        var sv = -sv_abs
-        var ov = (uvInfo.v_min + uvInfo.v_range) * sv_abs + entry.offset[1]
+        var v_max = uvInfo.v_min + uvInfo.v_range
+        var sv, ov
+        if (texInvertY) {
+          // invertY=true (PNG): texture V=0=bottom=Blender V=0 → output in Blender V
+          sv = -sv_abs
+          ov = v_max * sv_abs + entry.offset[1]
+        } else {
+          // invertY=false (KTX2): texture V=0=top=Blender V=1 → output = 1 - blender_v
+          sv = sv_abs
+          ov = 1.0 - v_max * sv_abs - entry.offset[1]
+        }
         pm.instancedBuffers.lmScaleOffset = new Vector4(su, sv, ou, ov)
         mapped++
       } else {
@@ -294,6 +323,15 @@ export class PilmiLoader {
       console.log('[PILMI] Material "' + orig.name + '" → "' + pilmi.name + '"')
     })
     console.log('[PILMI] ' + matMap.size + ' materials, ' + newInstances.length + ' instances, ' + mapped + '/' + (mapped + missing) + ' JSON-mapped')
+
+    // Register materials for runtime toggling
+    matMap.forEach(function (pilmi) {
+      pilmiRegistry.push({ mat: pilmi, lmTex: lmTex, aoTex: aoTex })
+    })
+
+    // Apply initial state from settings
+    if (!SETTINGS.pilmi.lightmap) setPilmiTexture('lightmap', false)
+    if (!SETTINGS.pilmi.ao) setPilmiTexture('ao', false)
 
     return { meshes: result.meshes }
   }

@@ -15,7 +15,7 @@ export const SETTINGS = {
     lowerBetaLimit: 30  * (Math.PI / 180), // highest view  (60° elevation)
     upperBetaLimit: 75  * (Math.PI / 180), // lowest view   (15° elevation)
 
-    lowerRadiusLimit: 20,
+    lowerRadiusLimit: 10,
     upperRadiusLimit: 250,
     wheelPrecision:   3,                  // lower = faster zoom
     pinchPrecision:   8,
@@ -25,7 +25,7 @@ export const SETTINGS = {
 
   // ── Sky ──────────────────────────────────────────────────────
   sky: {
-    enabled: true,
+    enabled: false,
     // Gradient sky colors (top → horizon)
     topColor:     { r: 0.12, g: 0.40, b: 0.82 },   // vivid tropical blue
     horizonColor: { r: 0.60, g: 0.82, b: 0.95 },   // warm light horizon
@@ -48,7 +48,7 @@ export const SETTINGS = {
 
   // ── Post-processing (DefaultRenderingPipeline) ───────────────
   postProcessing: {
-    enabled: true,
+    enabled: false,
 
     bloom: {
       enabled:   false,
@@ -87,14 +87,15 @@ export const SETTINGS = {
     renderTargetSize: 128,                // px — keep low for iPad
   },
 
-  // ── PILMI test controls ─────────────────────────────────────
+  // ── PILMI (Per-Instance Lightmap Integration) ────────────────
   pilmi: {
-    modelName: 'deli-int-shelves',
+    lightmap: true,    // toggle baked lightmap on PILMI models
+    ao:       true,    // toggle ambient occlusion on PILMI models
   },
 
   // ── Lighting / shadows ───────────────────────────────────────
   lighting: {
-    enabled: true,
+    enabled: false,
     ambientIntensity: 0.45,
     sunDirection: { x: -0.7, y: -1.0, z: -0.45 },
     sunPosition:  { x: 180, y: 260, z: 140 },
