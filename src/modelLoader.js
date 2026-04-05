@@ -1,6 +1,7 @@
 import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader'
 import { Vector3 }        from '@babylonjs/core/Maths/math.vector'
 import '@babylonjs/loaders/glTF'
+import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_draco_mesh_compression'
 import { PilmiLoader } from './pilmiShelvesLoader'
 
 export function makeLit(mat) {
