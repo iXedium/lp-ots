@@ -50,10 +50,21 @@ function normalizeName(fullName, jsonData) {
     name = parts[parts.length - 1]
   }
   if (jsonData[name]) return name
+  // Strip _primitiveN suffix from multi-material meshes
+  var base = name.replace(/_primitive\d+$/, '')
+  if (base !== name && jsonData[base]) return base
   const tokens = name.split('_')
   for (let i = 1; i < tokens.length; i++) {
     const key = tokens.slice(i).join('_')
     if (jsonData[key]) return key
+  }
+  // Also try stripping _primitiveN then the token loop
+  if (base !== name) {
+    const baseTokens = base.split('_')
+    for (let i = 1; i < baseTokens.length; i++) {
+      const key = baseTokens.slice(i).join('_')
+      if (jsonData[key]) return key
+    }
   }
   return null
 }
@@ -229,11 +240,12 @@ export class PilmiLoader {
       }
     }
 
-    // Compute UV2 min/range per master geometry — needed to normalise local UV into [0,1]
-    // UV2 is a proportional local UV (not [0,1]).  JSON scale/offset are in Blender atlas space.
-    // The relationship is:  atlas = (uv2 - uv2_min) / uv2_range * json_scale + json_offset
-    // Which re-arranges to:  atlas = uv2 * (json_scale/uv2_range) + (json_offset - uv2_min*json_scale/uv2_range)
-    var geoUvInfo = new Map()
+    // Compute UV2 min/range per original mesh — for multi-material meshes (split into
+    // _primitive0, _primitive1, …), we must union all primitives' UV2 to get the correct
+    // range that matches what the JSON scale/offset was baked from in Blender.
+    // Step 1: gather per-geometry UV2 bounds, grouped by base mesh name
+    var perGeo = new Map()      // geometry.uniqueId → {u_min,u_max,v_min,v_max}
+    var baseGroups = new Map()  // baseName → [geometry.uniqueId, …]
     for (var gi = 0; gi < renderMeshes.length; gi++) {
       var gm = renderMeshes[gi]
       if (gm.isAnInstance || !gm.geometry) continue
@@ -245,11 +257,34 @@ export class PilmiLoader {
         if (gu < gu_min) gu_min = gu; if (gu > gu_max) gu_max = gu
         if (gv < gv_min) gv_min = gv; if (gv > gv_max) gv_max = gv
       }
-      geoUvInfo.set(gm.geometry.uniqueId, {
-        u_min: gu_min, u_range: Math.max(gu_max - gu_min, 1e-6),
-        v_min: gv_min, v_range: Math.max(gv_max - gv_min, 1e-6),
-      })
+      perGeo.set(gm.geometry.uniqueId, { u_min: gu_min, u_max: gu_max, v_min: gv_min, v_max: gv_max })
+      var baseName = gm.name.replace(/_primitive\d+$/, '')
+      if (!baseGroups.has(baseName)) baseGroups.set(baseName, [])
+      baseGroups.get(baseName).push(gm.geometry.uniqueId)
       console.log('[PILMI] geo ' + gm.name + ' UV2 u=[' + gu_min.toFixed(4) + ',' + gu_max.toFixed(4) + '] v=[' + gv_min.toFixed(4) + ',' + gv_max.toFixed(4) + ']')
+    }
+    // Step 2: for each base group, compute the union UV2 range across all primitives
+    var geoUvInfo = new Map()  // geometry.uniqueId → {u_min, u_range, v_min, v_range}
+    for (var [baseName, geoIds] of baseGroups) {
+      var u_min = Infinity, u_max = -Infinity, v_min = Infinity, v_max = -Infinity
+      for (var k = 0; k < geoIds.length; k++) {
+        var b = perGeo.get(geoIds[k])
+        if (b.u_min < u_min) u_min = b.u_min
+        if (b.u_max > u_max) u_max = b.u_max
+        if (b.v_min < v_min) v_min = b.v_min
+        if (b.v_max > v_max) v_max = b.v_max
+      }
+      var info = {
+        u_min: u_min, u_range: Math.max(u_max - u_min, 1e-6),
+        v_min: v_min, v_range: Math.max(v_max - v_min, 1e-6),
+      }
+      // Assign the same union range to every geometry in this group
+      for (var k = 0; k < geoIds.length; k++) {
+        geoUvInfo.set(geoIds[k], info)
+      }
+      if (geoIds.length > 1) {
+        console.log('[PILMI] multi-mat "' + baseName + '" (' + geoIds.length + ' prims) union UV2 u=[' + u_min.toFixed(4) + ',' + u_max.toFixed(4) + '] v=[' + v_min.toFixed(4) + ',' + v_max.toFixed(4) + ']')
+      }
     }
 
     // Create one PBRCustomMaterial per unique original material
