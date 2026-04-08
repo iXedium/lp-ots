@@ -12,7 +12,7 @@ export const SETTINGS = {
     initialRadius: 80,
 
     // Elevation: 15°–60° from horizontal
-    lowerBetaLimit: 30  * (Math.PI / 180), // highest view  (60° elevation)
+    lowerBetaLimit: -30  * (Math.PI / 180), // highest view  (60° elevation)
     upperBetaLimit: 75  * (Math.PI / 180), // lowest view   (15° elevation)
 
     lowerRadiusLimit: 10,
