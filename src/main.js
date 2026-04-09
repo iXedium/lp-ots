@@ -62,17 +62,23 @@ const hud = createHUD(engine, scene, MODEL_NAMES)
 hud.update()
 
 // ── Splash screen ────────────────────────────────────────────
+import { LOADING_MESSAGES } from './loadingMessages'
+
 const splash     = document.getElementById('splash')
 const splashBar  = document.getElementById('splash-bar')
 const splashText = document.getElementById('splash-text')
 const totalModels = MODEL_NAMES.length
 let   loadedCount = 0
 
-function updateSplash(name) {
+// Shuffle messages so they feel fresh each visit
+const shuffled = [...LOADING_MESSAGES].sort(() => Math.random() - 0.5)
+
+function updateSplash() {
   loadedCount++
   const pct = Math.round((loadedCount / totalModels) * 100)
   if (splashBar)  splashBar.style.width = pct + '%'
-  if (splashText) splashText.textContent = `Loading ${name}… (${loadedCount}/${totalModels})`
+  const msg = shuffled[loadedCount % shuffled.length]
+  if (splashText) splashText.textContent = msg
 }
 
 function dismissSplash() {
@@ -85,7 +91,7 @@ function dismissSplash() {
 loadAllModels(scene, base, MODEL_NAMES, {
   skipMakeLit: SETTINGS.water.enabled ? [SETTINGS.water.modelName] : [],
   onProgress(name, data) {
-    updateSplash(name)
+    updateSplash()
     hud.update(engine.getFps(), data, false)
   },
 }).then(({ modelData, globalMin, globalMax }) => {
