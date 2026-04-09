@@ -7,7 +7,6 @@ import { ShaderMaterial }   from '@babylonjs/core/Materials/shaderMaterial'
 import { Effect }           from '@babylonjs/core/Materials/effect'
 import { DepthRenderer }    from '@babylonjs/core/Rendering/depthRenderer'
 import { Color4 }           from '@babylonjs/core/Maths/math.color'
-import { Vector4 }          from '@babylonjs/core/Maths/math.vector'
 import { SETTINGS }         from './constants'
 
 // ── GLSL — matches the playground approach exactly ───────────
@@ -106,16 +105,21 @@ export function createFoamMaterial(scene, camera) {
   mat.backFaceCulling = false
   mat.alphaMode = 2  // ALPHA_COMBINE
 
-  // Set uniforms (static — updated once + depth texture each frame)
-  mat.setTexture('depthTex', depthRenderer.getDepthMap())
-  mat.setFloat('camMinZ', camera.minZ)
-  mat.setFloat('camMaxZ', camera.maxZ)
-  mat.setFloat('maxDepth', f.maxDepth)
-  mat.setFloat('shorePower', f.shorePower)
-  mat.setFloat('foamEdgeWidth', f.foamEdgeWidth)
-  mat.setVector4('wDeepColor',    new Vector4(f.deepColor.r, f.deepColor.g, f.deepColor.b, f.deepColor.a))
-  mat.setVector4('wShallowColor', new Vector4(f.shallowColor.r, f.shallowColor.g, f.shallowColor.b, f.shallowColor.a))
-  mat.setVector4('wFoamColor',    new Vector4(f.foamColor.r, f.foamColor.g, f.foamColor.b, f.foamColor.a))
+  // Re-read SETTINGS every frame so the tweaker UI works in real-time
+  mat.onBind = () => {
+    const effect = mat.getEffect()
+    if (!effect) return
+    const s = SETTINGS.shorelineFoam
+    effect.setTexture('depthTex', depthRenderer.getDepthMap())
+    effect.setFloat('camMinZ', camera.minZ)
+    effect.setFloat('camMaxZ', camera.maxZ)
+    effect.setFloat('maxDepth', s.maxDepth)
+    effect.setFloat('shorePower', s.shorePower)
+    effect.setFloat('foamEdgeWidth', s.foamEdgeWidth)
+    effect.setDirectColor4('wDeepColor',    new Color4(s.deepColor.r, s.deepColor.g, s.deepColor.b, s.deepColor.a))
+    effect.setDirectColor4('wShallowColor', new Color4(s.shallowColor.r, s.shallowColor.g, s.shallowColor.b, s.shallowColor.a))
+    effect.setDirectColor4('wFoamColor',    new Color4(s.foamColor.r, s.foamColor.g, s.foamColor.b, s.foamColor.a))
+  }
 
   return mat
 }

@@ -20,6 +20,7 @@ import { applyFoamToWater }                    from './shorelineFoam'
 import { setupLighting, applyShadows } from './lighting'
 import { loadAllModels }               from './modelLoader'
 import { createHUD }                   from './hud'
+import { createWaterTweaker }          from './waterTweaker'
 
 const base       = import.meta.env.BASE_URL
 const MODEL_NAMES = modelFiles.map(f => f.replace(/\.glb$/i, ''))
@@ -119,7 +120,10 @@ loadAllModels(scene, base, MODEL_NAMES, {
 
   // Apply shoreline foam to ocean mesh
   const foamModel = modelData[SETTINGS.shorelineFoam.modelName]
-  if (foamModel) applyFoamToWater(scene, camera, foamModel.refs)
+  if (foamModel) {
+    applyFoamToWater(scene, camera, foamModel.refs)
+    createWaterTweaker()
+  }
 
   hud.update(engine.getFps(), modelData, true)
   modelsLoaded = true
