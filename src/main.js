@@ -53,6 +53,7 @@ window.addEventListener('keydown', e => {
     scene.debugLayer.isVisible()
       ? scene.debugLayer.hide()
       : scene.debugLayer.show({ embedMode: true, showExplorer: true, showInspector: true })
+    window.__requestRender?.()
   }
 })
 
@@ -74,13 +75,39 @@ loadAllModels(scene, base, MODEL_NAMES, {
   if (waterMat && waterModel) applyWater(waterMat, waterModel.refs, skybox)
 
   hud.update(engine.getFps(), modelData, true)
+  modelsLoaded = true
+  window.__requestRender?.()
   console.log('All models loaded.')
 })
 
-// ── Render loop ──────────────────────────────────────────────
+// ── Render-on-demand ─────────────────────────────────────────
+// Only render when the user interacts or the scene needs an update.
+// Always render continuously until models finish loading.
+let modelsLoaded = false
+let needsRender = true
+let lastInteraction = 0
+const ROD = SETTINGS.renderOnDemand
+
+/** Call from anywhere to force a re-render (e.g. HUD toggle, material change) */
+window.__requestRender = () => { needsRender = true; lastInteraction = performance.now() }
+
+// Track user interaction on the canvas to wake up the render loop
+const wakeRender = () => { needsRender = true; lastInteraction = performance.now() }
+canvas.addEventListener('pointerdown', wakeRender)
+canvas.addEventListener('pointermove', (e) => { if (e.buttons) wakeRender() })
+canvas.addEventListener('pointerup', wakeRender)
+canvas.addEventListener('wheel', wakeRender)
+canvas.addEventListener('keydown', wakeRender)
+
 let tick = 0
 engine.runRenderLoop(() => {
-  scene.render()
+  const elapsed = performance.now() - lastInteraction
+  const active = !modelsLoaded || needsRender || elapsed < ROD.cooldownMs
+
+  if (active) {
+    scene.render()
+    needsRender = false
+  }
   if (++tick % 30 === 0) hud.update(engine.getFps())
 })
 window.addEventListener('resize', () => engine.resize())

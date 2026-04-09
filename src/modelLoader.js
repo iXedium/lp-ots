@@ -3,6 +3,9 @@ import { Vector3 }        from '@babylonjs/core/Maths/math.vector'
 import '@babylonjs/loaders/glTF'
 import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_draco_mesh_compression'
 import { PilmiLoader } from './pilmiShelvesLoader'
+import { applyAutoMaterial } from './autoMaterial'
+
+import { SETTINGS } from './constants'
 
 export function makeLit(mat) {
   if (!mat) return
@@ -10,6 +13,14 @@ export function makeLit(mat) {
   if ('disableLighting' in mat) mat.disableLighting = false
   if ('environmentIntensity' in mat && (!mat.environmentIntensity || mat.environmentIntensity < 0.8)) {
     mat.environmentIntensity = 1.0
+  }
+  // Boost emissive intensity
+  const ei = SETTINGS.materials.emissiveIntensity
+  if (ei !== 1 && mat.emissiveColor) {
+    mat.emissiveColor.scaleInPlace(ei)
+  }
+  if (ei !== 1 && mat.emissiveTexture) {
+    mat.emissiveTexture.level = ei
   }
 }
 
@@ -36,9 +47,12 @@ export async function loadAllModels(scene, base, modelNames, { skipMakeLit = [],
     return (isPilmi
       ? new PilmiLoader(scene, `${base}`, pilmiName).load()
       : ImportMeshAsync(`${base}models/${name}.glb${devQuery}`, scene))
-      .then(result => {
+      .then(async result => {
         // PILMI models manage their own materials; skip makeLit for them.
         if (!isPilmi && !skipMakeLit.includes(name)) {
+          // Auto-discover textures for GLBs without embedded materials
+          await applyAutoMaterial(scene, `${base}`, name, result)
+
           const seen = new Set()
           for (const mesh of result.meshes) {
             const mats = mesh.material?.subMaterials ?? (mesh.material ? [mesh.material] : [])

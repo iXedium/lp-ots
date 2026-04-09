@@ -1,5 +1,5 @@
 import { SETTINGS } from './constants'
-import { setPilmiTexture } from './pilmiShelvesLoader'
+import { setPilmiTexture, setPilmiIntensity } from './pilmiShelvesLoader'
 
 function fmtK(n) { return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n) }
 function esc(s) {
@@ -68,6 +68,7 @@ export function createHUD(engine, scene, modelNames) {
       SETTINGS.pilmi[slot] = !SETTINGS.pilmi[slot]
       setPilmiTexture(slot, SETTINGS.pilmi[slot])
       update(engine.getFps(), null)
+      window.__requestRender?.()
       return
     }
     if (!toggle) return
@@ -78,6 +79,21 @@ export function createHUD(engine, scene, modelNames) {
     d.visible = !d.visible
     d.refs.forEach(m => m.setEnabled(d.visible))
     update(engine.getFps(), null)
+    window.__requestRender?.()
+  })
+
+  // Slider input delegation for PILMI intensity
+  panel.addEventListener('input', (e) => {
+    const slider = e.target.closest('input[data-pilmi-intensity]')
+    if (!slider) return
+    const slot = slider.dataset.pilmiIntensity
+    const val = parseFloat(slider.value)
+    SETTINGS.pilmi[slot + 'Intensity'] = val
+    setPilmiIntensity(slot, val)
+    // Update the label next to the slider
+    const label = slider.parentElement.querySelector('.pilmi-val')
+    if (label) label.textContent = val.toFixed(2)
+    window.__requestRender?.()
   })
 
   // ── Render panel contents ───────────────────────────────────
@@ -128,17 +144,28 @@ export function createHUD(engine, scene, modelNames) {
       html += `<hr style="border:none;border-top:1px solid #444;margin:6px 0">`
       html += `<div style="color:#aaa;font-size:11px">visible: ${totalMeshes} meshes · ${fmtK(totalTris)} tris</div>`
 
-      // PILMI texture toggles
+      // PILMI texture toggles + intensity sliders
       const lmOn = SETTINGS.pilmi.lightmap
       const aoOn = SETTINGS.pilmi.ao
+      const lmInt = SETTINGS.pilmi.lightmapIntensity
+      const aoInt = SETTINGS.pilmi.aoIntensity
       const pStyle = (on) => `cursor:pointer;padding:2px 8px;font-size:11px;min-height:28px;`
         + `background:${on ? '#1a3a5a' : '#333'};color:${on ? '#6cf' : '#aaa'};`
         + `border:1px solid ${on ? '#3a7aba' : '#555'};border-radius:4px`
+      const sliderCSS = `width:100%;accent-color:#6cf;margin:2px 0`
       html += `<hr style="border:none;border-top:1px solid #444;margin:6px 0">`
       html += `<div style="color:#aaa;font-size:11px;margin-bottom:4px">PILMI textures</div>`
-      html += `<div style="display:flex;gap:6px">`
+      html += `<div style="display:flex;gap:6px;margin-bottom:6px">`
         + `<button data-pilmi="lightmap" style="${pStyle(lmOn)}">${lmOn ? 'LM ON' : 'LM OFF'}</button>`
         + `<button data-pilmi="ao" style="${pStyle(aoOn)}">${aoOn ? 'AO ON' : 'AO OFF'}</button>`
+        + `</div>`
+      html += `<div style="font-size:11px;color:#aaa">`
+        + `LM intensity: <span class="pilmi-val">${lmInt.toFixed(2)}</span>`
+        + `<input type="range" data-pilmi-intensity="lightmap" min="0" max="2" step="0.05" value="${lmInt}" style="${sliderCSS}">`
+        + `</div>`
+      html += `<div style="font-size:11px;color:#aaa">`
+        + `AO intensity: <span class="pilmi-val">${aoInt.toFixed(2)}</span>`
+        + `<input type="range" data-pilmi-intensity="ao" min="0" max="2" step="0.05" value="${aoInt}" style="${sliderCSS}">`
         + `</div>`
     }
 

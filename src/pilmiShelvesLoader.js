@@ -39,6 +39,21 @@ export function setPilmiTexture(slot, enabled) {
   }
 }
 
+/**
+ * Set lightmap or AO intensity (level) on all PILMI materials.
+ * @param {'lightmap'|'ao'} slot
+ * @param {number} value  0..2
+ */
+export function setPilmiIntensity(slot, value) {
+  for (const entry of pilmiRegistry) {
+    if (slot === 'lightmap' && entry.lmTex) {
+      entry.lmTex.level = value
+    } else if (slot === 'ao' && entry.aoTex) {
+      entry.aoTex.level = value
+    }
+  }
+}
+
 /* ── helpers ─────────────────────────────────────────────────── */
 
 function normalizeName(fullName, jsonData) {
@@ -122,6 +137,13 @@ function createPilmiMaterial(scene, original, lmTex, aoTex) {
   mat.bumpTexture     = original.bumpTexture     || null
   mat.emissiveTexture = original.emissiveTexture || null
   mat.emissiveColor   = original.emissiveColor ? original.emissiveColor.clone() : mat.emissiveColor
+
+  // Boost emissive intensity
+  const ei = SETTINGS.pilmi.emissiveIntensity ?? SETTINGS.materials?.emissiveIntensity ?? 1
+  if (ei !== 1) {
+    if (mat.emissiveColor) mat.emissiveColor.scaleInPlace(ei)
+    if (mat.emissiveTexture) mat.emissiveTexture.level = ei
+  }
   mat.backFaceCulling = original.backFaceCulling != null ? original.backFaceCulling : true
   mat.sideOrientation = original.sideOrientation
   mat.alpha           = original.alpha           != null ? original.alpha : 1
@@ -367,6 +389,8 @@ export class PilmiLoader {
     // Apply initial state from settings
     if (!SETTINGS.pilmi.lightmap) setPilmiTexture('lightmap', false)
     if (!SETTINGS.pilmi.ao) setPilmiTexture('ao', false)
+    if (SETTINGS.pilmi.lightmapIntensity !== 1.0) setPilmiIntensity('lightmap', SETTINGS.pilmi.lightmapIntensity)
+    if (SETTINGS.pilmi.aoIntensity !== 1.0) setPilmiIntensity('ao', SETTINGS.pilmi.aoIntensity)
 
     return { meshes: result.meshes }
   }

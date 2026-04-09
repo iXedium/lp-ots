@@ -55,8 +55,35 @@ export default defineConfig(({ command }) => ({
   },
   server: {
     headers: {
-      'Cache-Control': 'no-store',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    },
+    watch: {
+      // Watch public dir for texture/model changes
+      usePolling: false,
     },
   },
-  plugins: [modelListPlugin()],
+  // Disable dep pre-bundle caching — forces fresh builds every dev start
+  cacheDir: '.vite_cache',
+  plugins: [
+    modelListPlugin(),
+    // Force no-cache on every response (including static/public assets)
+    // Wraps writeHead to override any cache headers set by Vite's sirv
+    {
+      name: 'no-cache',
+      configureServer(server) {
+        server.middlewares.use((_req, res, next) => {
+          const origWriteHead = res.writeHead.bind(res)
+          res.writeHead = function (statusCode, ...args) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            res.setHeader('Pragma', 'no-cache')
+            res.setHeader('Expires', '0')
+            return origWriteHead(statusCode, ...args)
+          }
+          next()
+        })
+      },
+    },
+  ],
 }))

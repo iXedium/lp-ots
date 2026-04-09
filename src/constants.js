@@ -25,7 +25,7 @@ export const SETTINGS = {
 
   // ── Sky ──────────────────────────────────────────────────────
   sky: {
-    enabled: false,
+    enabled: true,
     // Gradient sky colors (top → horizon)
     topColor:     { r: 0.12, g: 0.40, b: 0.82 },   // vivid tropical blue
     horizonColor: { r: 0.60, g: 0.82, b: 0.95 },   // warm light horizon
@@ -48,11 +48,11 @@ export const SETTINGS = {
 
   // ── Post-processing (DefaultRenderingPipeline) ───────────────
   postProcessing: {
-    enabled: false,
+    enabled: true,
 
     bloom: {
-      enabled:   false,
-      threshold: 0.8,
+      enabled:   true,
+      threshold: 0.3,
       weight:    0.35,
       kernel:    64,
       scale:     0.5,
@@ -62,8 +62,8 @@ export const SETTINGS = {
       contrast:            1.3,
       exposure:            1.15,
       toneMappingEnabled:  true,
-      toneMappingType:     1,             // 0 = standard (better color), 1 = ACES
-      saturationBoost:     50,            // ColorCurves globalSaturation
+      toneMappingType:     0,             // 0 = standard (better color), 1 = ACES
+      saturationBoost:     80,            // ColorCurves globalSaturation
     },
 
     fxaa: true,
@@ -89,8 +89,20 @@ export const SETTINGS = {
 
   // ── PILMI (Per-Instance Lightmap Integration) ────────────────
   pilmi: {
-    lightmap: true,    // toggle baked lightmap on PILMI models
-    ao:       true,    // toggle ambient occlusion on PILMI models
+    lightmap:          true,   // toggle baked lightmap on PILMI models
+    ao:                false,  // toggle ambient occlusion on PILMI models
+    lightmapIntensity: 1.0,    // 0..2 slider range
+    aoIntensity:       1.0,    // 0..2 slider range
+  },
+
+  // ── Render-on-demand ─────────────────────────────────────────
+  renderOnDemand: {
+    cooldownMs: 500,           // ms to keep rendering after last interaction
+  },
+
+  // ── Materials ────────────────────────────────────────────────
+  materials: {
+    emissiveIntensity: 10,     // multiplier for emissive color/texture on all PBR materials
   },
 
   // ── Lighting / shadows ───────────────────────────────────────

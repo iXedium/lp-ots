@@ -17,16 +17,13 @@ export function setupCamera(scene, canvas) {
   camera.pinchPrecision    = c.pinchPrecision
   camera.panningSensibility = c.panningSensibility
   camera.minZ              = c.minZ
+
   return camera
 }
 
-/** Re-frame after all models are loaded */
+/** Adjust limits after all models are loaded (no snap, no target change) */
 export function frameCamera(camera, min, max) {
   const c = SETTINGS.camera
-  camera.setTarget(Vector3.Center(min, max))
   const span = Vector3.Distance(min, max)
-  camera.radius = Math.min(span * 0.45, c.upperRadiusLimit)
   camera.upperRadiusLimit = Math.max(span * 2, c.upperRadiusLimit)
-  camera.alpha = c.initialAlpha
-  camera.beta  = c.initialBeta
 }
