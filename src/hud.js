@@ -59,6 +59,19 @@ export function createHUD(engine, scene, modelNames) {
 
   // Use pointerdown delegation so toggles stay reliable while panel HTML refreshes.
   panel.addEventListener('pointerdown', (e) => {
+    const actionBtn = e.target.closest('button[data-action]')
+    if (actionBtn) {
+      e.preventDefault()
+      e.stopPropagation()
+      const action = actionBtn.dataset.action
+      if (action === 'rod') {
+        window.__setRodEnabled?.(!(window.__rodEnabled !== false))
+        update(engine.getFps(), null)
+      } else if (action === 'water-tweaker') {
+        window.__toggleWaterTweaker?.()
+      }
+      return
+    }
     const toggle = e.target.closest('button[data-m]')
     const pilmiBtn = e.target.closest('button[data-pilmi]')
     if (pilmiBtn) {
@@ -103,7 +116,12 @@ export function createHUD(engine, scene, modelNames) {
 
     // Button always shows live FPS
     const fpsVal = fps !== undefined ? Math.round(fps) : null
-    btn.textContent = (fpsVal !== null && isFinite(fpsVal)) ? `${fpsVal} FPS` : '… FPS'
+    const dc = scene.getActiveMeshes().length
+    const idle = window.__isRenderIdle
+    const fpsText = (fpsVal !== null && isFinite(fpsVal)) ? `${fpsVal} FPS` : '… FPS'
+    const dcText = dc > 0 ? ` | ${dc} DC` : ''
+    const idleHtml = idle ? ' <span style="color:#f66;font-size:12px;font-family:system-ui,sans-serif">⏸</span>' : ''
+    btn.innerHTML = `${fpsText}${dcText}${idleHtml}`
 
     if (!expanded) return
 
@@ -168,6 +186,18 @@ export function createHUD(engine, scene, modelNames) {
         + `<input type="range" data-pilmi-intensity="ao" min="0" max="2" step="0.05" value="${aoInt}" style="${sliderCSS}">`
         + `</div>`
     }
+
+    // ── Dev tools ─────────────────────────────────────────────
+    const rodOn = window.__rodEnabled !== false
+    const dBase = `cursor:pointer;padding:2px 8px;font-size:11px;min-height:28px;border-radius:4px;border:1px solid`
+    const rodStyle = `${dBase} ${rodOn ? '#3a8a3a' : '#555'};background:${rodOn ? '#1a4a1a' : '#333'};color:${rodOn ? '#6f6' : '#aaa'}`
+    const wtStyle  = `${dBase} #3a6a9a;background:#1a3a5a;color:#6cf`
+    html += `<hr style="border:none;border-top:1px solid #444;margin:6px 0">`
+    html += `<div style="color:#aaa;font-size:11px;margin-bottom:4px">Dev tools</div>`
+    html += `<div style="display:flex;gap:6px;flex-wrap:wrap">`
+      + `<button data-action="rod" style="${rodStyle}">ROD: ${rodOn ? 'ON' : 'OFF'}</button>`
+      + `<button data-action="water-tweaker" style="${wtStyle}">Water Tweaker</button>`
+      + `</div>`
 
     panel.innerHTML = html
 

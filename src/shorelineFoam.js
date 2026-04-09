@@ -149,10 +149,5 @@ export function applyFoamToWater(scene, camera, meshes) {
     }
   }
 
-  // Keep render loop alive for depth updates
-  scene.onBeforeRenderObservable.add(() => {
-    window.__requestRender?.()
-  })
-
   console.log('[Foam] Water shader applied to', meshes.length, 'water meshes')
 }

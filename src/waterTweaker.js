@@ -10,7 +10,14 @@ export function createWaterTweaker() {
   const panel = document.createElement('div')
   panel.id = 'water-tweaker'
   panel.innerHTML = buildHTML(f)
+  panel.style.display = 'none'
   document.body.appendChild(panel)
+
+  // Expose a global toggle so the HUD button can show/hide this panel
+  window.__toggleWaterTweaker = () => {
+    panel.style.display = panel.style.display === 'none' ? '' : 'none'
+    window.__requestRender?.()
+  }
 
   // Make it draggable by the header
   const header = panel.querySelector('.wt-header')
@@ -28,12 +35,10 @@ export function createWaterTweaker() {
   })
   header.addEventListener('pointerup', () => { dragging = false })
 
-  // Collapse toggle
-  const body = panel.querySelector('.wt-body')
+  // Close (×) button — hides the whole tweaker panel; reopen via HUD button
   const collapseBtn = panel.querySelector('.wt-collapse')
   collapseBtn.addEventListener('click', () => {
-    body.style.display = body.style.display === 'none' ? '' : 'none'
-    collapseBtn.textContent = body.style.display === 'none' ? '+' : '−'
+    window.__toggleWaterTweaker?.()
   })
 
   // Slider + color input delegation
@@ -146,7 +151,7 @@ function buildHTML(f) {
 </style>
 <div class="wt-header">
   <span>Water Shader</span>
-  <button class="wt-collapse">−</button>
+  <button class="wt-collapse">×</button>
 </div>
 <div class="wt-body">
   <div class="wt-section">Colors</div>

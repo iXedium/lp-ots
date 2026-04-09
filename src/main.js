@@ -126,10 +126,21 @@ loadAllModels(scene, base, MODEL_NAMES, {
   }
 
   hud.update(engine.getFps(), modelData, true)
-  modelsLoaded = true
   window.__requestRender?.()
-  dismissSplash()
   console.log('All models loaded.')
+
+  // Keep splash visible until water shader has compiled (avoids a flash on first render)
+  const doFinish = () => { modelsLoaded = true; dismissSplash() }
+  if (!waterMat) {
+    scene.onAfterRenderObservable.addOnce(doFinish)
+  } else {
+    const checkReady = scene.onAfterRenderObservable.add(() => {
+      if (waterMat.isReady()) {
+        scene.onAfterRenderObservable.remove(checkReady)
+        doFinish()
+      }
+    })
+  }
 })
 
 // ── Render-on-demand ─────────────────────────────────────────
@@ -139,6 +150,8 @@ let modelsLoaded = false
 let needsRender = true
 let lastInteraction = 0
 const ROD = SETTINGS.renderOnDemand
+window.__rodEnabled = true
+window.__setRodEnabled = (v) => { window.__rodEnabled = v; window.__requestRender?.() }
 
 /** Call from anywhere to force a re-render (e.g. HUD toggle, material change) */
 window.__requestRender = () => { needsRender = true; lastInteraction = performance.now() }
@@ -149,17 +162,21 @@ canvas.addEventListener('pointerdown', wakeRender)
 canvas.addEventListener('pointermove', (e) => { if (e.buttons) wakeRender() })
 canvas.addEventListener('pointerup', wakeRender)
 canvas.addEventListener('wheel', wakeRender)
-canvas.addEventListener('keydown', wakeRender)
+canvas.addEventListener('keydown', (e) => {
+  if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) return
+  wakeRender()
+})
 
 let tick = 0
 engine.runRenderLoop(() => {
   const elapsed = performance.now() - lastInteraction
-  const active = !modelsLoaded || needsRender || elapsed < ROD.cooldownMs
+  const active = !modelsLoaded || !window.__rodEnabled || needsRender || elapsed < ROD.cooldownMs
 
   if (active) {
     scene.render()
     needsRender = false
   }
+  window.__isRenderIdle = !active && modelsLoaded
   if (++tick % 30 === 0) hud.update(engine.getFps())
 })
 window.addEventListener('resize', () => engine.resize())
