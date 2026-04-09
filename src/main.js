@@ -70,19 +70,29 @@ const splashText = document.getElementById('splash-text')
 const totalModels = MODEL_NAMES.length
 let   loadedCount = 0
 
-// Shuffle messages so they feel fresh each visit
-const shuffled = [...LOADING_MESSAGES].sort(() => Math.random() - 0.5)
+// Shuffle messages fresh each time the splash is shown
+let shuffled = [...LOADING_MESSAGES].sort(() => Math.random() - 0.5)
+let msgIndex = 0
 
-function updateSplash() {
+// Rotate fun messages on a timer (starts immediately)
+const msgInterval = setInterval(() => {
+  if (splashText) splashText.textContent = shuffled[msgIndex % shuffled.length]
+  msgIndex++
+}, SETTINGS.splash.messageIntervalMs)
+
+// Show first message right away
+if (splashText) splashText.textContent = shuffled[0]
+msgIndex = 1
+
+function updateSplashProgress() {
   loadedCount++
   const pct = Math.round((loadedCount / totalModels) * 100)
-  if (splashBar)  splashBar.style.width = pct + '%'
-  const msg = shuffled[loadedCount % shuffled.length]
-  if (splashText) splashText.textContent = msg
+  if (splashBar) splashBar.style.width = pct + '%'
 }
 
 function dismissSplash() {
   if (!splash) return
+  clearInterval(msgInterval)
   splash.classList.add('fade-out')
   setTimeout(() => splash.remove(), 700)
 }
@@ -91,7 +101,7 @@ function dismissSplash() {
 loadAllModels(scene, base, MODEL_NAMES, {
   skipMakeLit: SETTINGS.water.enabled ? [SETTINGS.water.modelName] : [],
   onProgress(name, data) {
-    updateSplash()
+    updateSplashProgress()
     hud.update(engine.getFps(), data, false)
   },
 }).then(({ modelData, globalMin, globalMax }) => {

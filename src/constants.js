@@ -105,6 +105,11 @@ export const SETTINGS = {
     emissiveIntensity: 10,     // multiplier for emissive color/texture on all PBR materials
   },
 
+  // ── Splash screen ───────────────────────────────────────────
+  splash: {
+    messageIntervalMs: 2000,   // rotate fun messages every N ms
+  },
+
   // ── Lighting / shadows ───────────────────────────────────────
   lighting: {
     enabled: false,
