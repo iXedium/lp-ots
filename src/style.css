@@ -13,55 +13,7 @@ body {
   background: #000;
 }
 
-/* ── Splash / loading screen ─────────────────────────────── */
-#splash {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  /* Gradient inspired by the logo: warm sand → teal ocean */
-  background: linear-gradient(170deg, #f5e6d3 0%, #e8c9a0 30%, #2db5a0 70%, #1a7a6d 100%);
-  transition: opacity 0.6s ease-out;
-}
-#splash.fade-out {
-  opacity: 0;
-  pointer-events: none;
-}
-#splash-logo {
-  width: min(60vw, 320px);
-  height: auto;
-  margin-bottom: 2rem;
-  filter: drop-shadow(0 4px 24px rgba(0,0,0,0.25));
-  animation: splash-bob 2.5s ease-in-out infinite;
-}
-@keyframes splash-bob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-10px); }
-}
-#splash-bar-wrap {
-  width: min(50vw, 280px);
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(255,255,255,0.3);
-  overflow: hidden;
-  margin-bottom: 1rem;
-}
-#splash-bar {
-  height: 100%;
-  width: 0%;
-  border-radius: 3px;
-  background: #e8764a;
-  transition: width 0.3s ease;
-}
-#splash-text {
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 0.9rem;
-  color: rgba(255,255,255,0.85);
-  letter-spacing: 0.05em;
-}
+/* Splash styles are inlined in index.html to prevent FOUC */
 
 #renderCanvas {
   width: 100vw;
