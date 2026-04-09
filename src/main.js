@@ -16,6 +16,7 @@ import { setupSky }                    from './sky'
 import { setupFog }                    from './fog'
 import { setupPostProcessing }         from './postprocessing'
 import { createWaterMaterial, applyWater } from './water'
+import { applyFoamToWater }                    from './shorelineFoam'
 import { setupLighting, applyShadows } from './lighting'
 import { loadAllModels }               from './modelLoader'
 import { createHUD }                   from './hud'
@@ -99,7 +100,10 @@ function dismissSplash() {
 
 // ── Load models ──────────────────────────────────────────────
 loadAllModels(scene, base, MODEL_NAMES, {
-  skipMakeLit: SETTINGS.water.enabled ? [SETTINGS.water.modelName] : [],
+  skipMakeLit: [
+    ...(SETTINGS.water.enabled ? [SETTINGS.water.modelName] : []),
+    ...(SETTINGS.shorelineFoam.enabled ? [SETTINGS.shorelineFoam.modelName] : []),
+  ],
   onProgress(name, data) {
     updateSplashProgress()
     hud.update(engine.getFps(), data, false)
@@ -112,6 +116,10 @@ loadAllModels(scene, base, MODEL_NAMES, {
   // Apply water material to pool-water meshes
   const waterModel = modelData[SETTINGS.water.modelName]
   if (waterMat && waterModel) applyWater(waterMat, waterModel.refs, skybox)
+
+  // Apply shoreline foam to ocean mesh
+  const foamModel = modelData[SETTINGS.shorelineFoam.modelName]
+  if (foamModel) applyFoamToWater(scene, camera, foamModel.refs)
 
   hud.update(engine.getFps(), modelData, true)
   modelsLoaded = true

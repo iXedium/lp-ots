@@ -87,6 +87,18 @@ export const SETTINGS = {
     renderTargetSize: 128,                // px — keep low for iPad
   },
 
+  // ── Shoreline foam ──────────────────────────────────────────
+  shorelineFoam: {
+    enabled:        true,
+    modelName:      'water',              // GLB with the ocean surface
+    deepColor:      { r: 0.0, g: 0.15, b: 0.4, a: 1.0 },   // deep ocean blue
+    shallowColor:   { r: 0.15, g: 0.55, b: 0.7, a: 0.9 },  // near-shore turquoise
+    foamColor:      { r: 0.95, g: 0.98, b: 1.0, a: 1.0 },  // bright foam at waterline
+    maxDepth:       5.0,          // depth range for shallow→deep gradient (world units)
+    shorePower:     3.0,          // >1 = tighter gradient near shore (1=linear, higher=tighter)
+    foamEdgeWidth:  0.8,          // width of bright foam line at waterline (world units)
+  },
+
   // ── PILMI (Per-Instance Lightmap Integration) ────────────────
   pilmi: {
     lightmap:          true,   // toggle baked lightmap on PILMI models
