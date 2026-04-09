@@ -61,10 +61,33 @@ window.addEventListener('keydown', e => {
 const hud = createHUD(engine, scene, MODEL_NAMES)
 hud.update()
 
+// ── Splash screen ────────────────────────────────────────────
+const splash     = document.getElementById('splash')
+const splashBar  = document.getElementById('splash-bar')
+const splashText = document.getElementById('splash-text')
+const totalModels = MODEL_NAMES.length
+let   loadedCount = 0
+
+function updateSplash(name) {
+  loadedCount++
+  const pct = Math.round((loadedCount / totalModels) * 100)
+  if (splashBar)  splashBar.style.width = pct + '%'
+  if (splashText) splashText.textContent = `Loading ${name}… (${loadedCount}/${totalModels})`
+}
+
+function dismissSplash() {
+  if (!splash) return
+  splash.classList.add('fade-out')
+  setTimeout(() => splash.remove(), 700)
+}
+
 // ── Load models ──────────────────────────────────────────────
 loadAllModels(scene, base, MODEL_NAMES, {
   skipMakeLit: SETTINGS.water.enabled ? [SETTINGS.water.modelName] : [],
-  onProgress(name, data) { hud.update(engine.getFps(), data, false) },
+  onProgress(name, data) {
+    updateSplash(name)
+    hud.update(engine.getFps(), data, false)
+  },
 }).then(({ modelData, globalMin, globalMax }) => {
   frameCamera(camera, globalMin, globalMax)
 
@@ -77,6 +100,7 @@ loadAllModels(scene, base, MODEL_NAMES, {
   hud.update(engine.getFps(), modelData, true)
   modelsLoaded = true
   window.__requestRender?.()
+  dismissSplash()
   console.log('All models loaded.')
 })
 
