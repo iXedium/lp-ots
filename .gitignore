@@ -16,6 +16,9 @@ dist-ssr
 # Old/archived models
 public/models/OLD/
 
+# Scratch / temp files (never commit large scratch assets)
+temp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

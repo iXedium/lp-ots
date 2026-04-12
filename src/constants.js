@@ -130,11 +130,27 @@ export const SETTINGS = {
   // ── Materials ────────────────────────────────────────────────
   materials: {
     emissiveIntensity: 10,     // multiplier for emissive color/texture on all PBR materials
-  },
+    // Normal map strength (bumpTexture.level). 1.0 = full; reduce to 0.5–0.8 if too harsh.
+    normalMapStrength: 1.0,
+
+    // Set true only if your normal maps were exported in DirectX convention (Y-down).
+    // Blender GLTF and baked exports default to OpenGL (Y-up) — keep false for those.
+    normalMapInvertY: false,
+    normalMapInvertX: true,
+
+    // Lightmap texture level. 1.0 = full additive contribution.
+    // When a lightmap is present, IBL is reduced to bakedEnvironmentIntensity so
+    // the baked lighting is the sole diffuse source (no double-contribution from IBL).
+    lightmapStrength: 1.0,
+
+    // Per-material environment (IBL) intensity when a lightmap texture is applied.
+    // 0.0 = IBL off (lightmap only, correct for fully pre-baked Blender scenes).
+    // Increase to 0.1–0.3 if you want some IBL specular reflections on lit objects.
+    lightmapEnvironmentIntensity: 0.0,  },
 
   // ── Splash screen ───────────────────────────────────────────
   splash: {
-    messageIntervalMs: 2000,   // rotate fun messages every N ms
+    messageIntervalMs: 4000,   // rotate fun messages every N ms
   },
 
   // ── Lighting / shadows ───────────────────────────────────────

@@ -16,15 +16,21 @@ precision highp float;
 attribute vec3 position;
 attribute vec2 uv;
 
+uniform mat4 world;
 uniform mat4 worldViewProjection;
 
 varying vec2 vUV;
 varying vec4 vClipSpace;
+varying float vFogDist;
 
 void main() {
   gl_Position = worldViewProjection * vec4(position, 1.0);
   vUV = uv;
   vClipSpace = gl_Position;
+  // Distance from camera for EXP2 fog (length of world-space position works for
+  // a flat water plane because camera.position is at (0,0,0) in view space)
+  vec4 wp = world * vec4(position, 1.0);
+  vFogDist = gl_Position.z;  // view-space depth
 }
 `
 
@@ -33,6 +39,7 @@ precision highp float;
 
 varying vec2 vUV;
 varying vec4 vClipSpace;
+varying float vFogDist;
 
 uniform sampler2D depthTex;
 uniform float camMinZ;
@@ -43,6 +50,10 @@ uniform float foamEdgeWidth;    // world-unit width of bright foam line at water
 uniform vec4 wDeepColor;
 uniform vec4 wShallowColor;
 uniform vec4 wFoamColor;
+
+// Fog
+uniform float fogDensity;
+uniform vec3  fogColor;
 
 void main() {
   // Screen-space coords from clip space → NDC (0..1)
@@ -67,6 +78,10 @@ void main() {
   // Foam edge: bright line right at the waterline
   float foamEdge = 1.0 - smoothstep(0.0, foamEdgeWidth, waterDepth);
   vec4 col = mix(waterCol, wFoamColor, foamEdge);
+
+  // EXP2 fog — matches BabylonJS Scene.FOGMODE_EXP2
+  float fogAmount = 1.0 - clamp(exp(-pow(fogDensity * vFogDist, 2.0)), 0.0, 1.0);
+  col.rgb = mix(col.rgb, fogColor, fogAmount);
 
   gl_FragColor = col;
 }
@@ -93,10 +108,11 @@ export function createFoamMaterial(scene, camera) {
   }, {
     attributes: ['position', 'normal', 'uv'],
     uniforms: [
-      'worldViewProjection',
+      'world', 'worldViewProjection',
       'camMinZ', 'camMaxZ', 'maxDepth',
       'shorePower', 'foamEdgeWidth',
       'wDeepColor', 'wShallowColor', 'wFoamColor',
+      'fogDensity', 'fogColor',
     ],
     samplers: ['depthTex'],
     needAlphaBlending: true,
@@ -119,6 +135,12 @@ export function createFoamMaterial(scene, camera) {
     effect.setDirectColor4('wDeepColor',    new Color4(s.deepColor.r, s.deepColor.g, s.deepColor.b, s.deepColor.a))
     effect.setDirectColor4('wShallowColor', new Color4(s.shallowColor.r, s.shallowColor.g, s.shallowColor.b, s.shallowColor.a))
     effect.setDirectColor4('wFoamColor',    new Color4(s.foamColor.r, s.foamColor.g, s.foamColor.b, s.foamColor.a))
+
+    // Fog — read straight from scene state so it stays in sync with fog.js
+    const fogOn = scene.fogMode !== 0 // Scene.FOGMODE_NONE
+    effect.setFloat('fogDensity', fogOn ? scene.fogDensity : 0.0)
+    const fc = scene.fogColor || { r: 0, g: 0, b: 0 }
+    effect.setFloat3('fogColor', fc.r, fc.g, fc.b)
   }
 
   return mat
@@ -140,14 +162,32 @@ export function applyFoamToWater(scene, camera, meshes) {
     }
   }
 
-  // Build depth render list excluding water meshes
+  // Use a live predicate instead of a static renderList.
+  // Alpha-test / blend meshes are excluded because the depth shader can't honour
+  // their transparency — recording the billboard's depth at transparent holes
+  // corrupts the water colour (white foam or missing water).
+  // Also dynamically handles meshes added after this point (PILMI instances, etc.).
   const depthMap = depthRenderer.getDepthMap()
-  depthMap.renderList = []
-  for (const m of scene.meshes) {
-    if (!waterIds.has(m.uniqueId) && m.isEnabled() && m.getTotalVertices?.() > 0) {
-      depthMap.renderList.push(m)
-    }
+  depthMap.renderList = null   // predicate takes over when renderList is null
+  depthMap.renderListPredicate = (mesh) => {
+    if (waterIds.has(mesh.uniqueId))          return false
+    if (!mesh.isEnabled())                    return false
+    if (!(mesh.getTotalVertices?.() > 0))     return false
+    const mat = mesh.material
+    if (mat && (mat.needAlphaBlending?.() || mat.needAlphaTesting?.())) return false
+    return true
   }
 
   console.log('[Foam] Water shader applied to', meshes.length, 'water meshes')
+
+  // The under-water mesh is a 3D volume whose side-faces render in the opaque pass
+  // and write depth values closer to camera than the water surface when viewed at
+  // shallow angles (shore view). This blocks the foam from rendering through
+  // alpha-test leaf cutout holes.  Disabling depth writes on that mesh lets the
+  // foam always win the depth test at those pixels.
+  const underWaterMesh = scene.meshes.find(m => m.name === 'under-water')
+  if (underWaterMesh?.material) {
+    underWaterMesh.material.disableDepthWrite = true
+    console.log('[Foam] Disabled depth write on under-water-mat to prevent foam occlusion')
+  }
 }

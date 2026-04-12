@@ -11,8 +11,16 @@ export function makeLit(mat) {
   if (!mat) return
   if ('unlit' in mat) mat.unlit = false
   if ('disableLighting' in mat) mat.disableLighting = false
-  if ('environmentIntensity' in mat && (!mat.environmentIntensity || mat.environmentIntensity < 0.8)) {
+  if ('environmentIntensity' in mat && (!mat.environmentIntensity || mat.environmentIntensity < 0.8)
+      && !mat.lightmapTexture) {
     mat.environmentIntensity = 1.0
+  }
+  // Billboard leaves: change ALPHABLEND to pure ALPHATEST.
+  // ALPHATEST renders in the opaque pass and writes depth so that water/foam
+  // (transparent pass) correctly depth-tests behind it. Avoids all sorting issues.
+  if (mat.transparencyMode === 2 && mat.useAlphaFromAlbedoTexture && mat.albedoTexture?.hasAlpha) {
+    mat.transparencyMode = 1   // PBRMaterial.PBRMATERIAL_ALPHATEST
+    mat.alphaTest = mat.alphaTest || 0.5
   }
   // Boost emissive intensity
   const ei = SETTINGS.materials.emissiveIntensity

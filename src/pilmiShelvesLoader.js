@@ -147,6 +147,21 @@ function createPilmiMaterial(scene, original, lmTex, aoTex) {
   mat.backFaceCulling = original.backFaceCulling != null ? original.backFaceCulling : true
   mat.sideOrientation = original.sideOrientation
   mat.alpha           = original.alpha           != null ? original.alpha : 1
+  // Copy transparency settings from original GLB material.
+  // PILMI creates a fresh PBRCustomMaterial which defaults to no transparency;
+  // without copying these the leaves render as a solid card (no alpha cutout).
+  mat.useAlphaFromAlbedoTexture = !!original.useAlphaFromAlbedoTexture
+  if (original.transparencyMode != null) {
+    // Use ALPHATEST (1) for ALPHABLEND (2) materials: renders in opaque pass so that
+    // water/foam (transparent pass) correctly depth-tests behind it.
+    const tm = original.transparencyMode === 2 ? 1 : original.transparencyMode
+    mat.transparencyMode = tm
+    if (tm === 1) mat.alphaTest = original.alphaTest || 0.5
+  } else if (mat.useAlphaFromAlbedoTexture && original.albedoTexture?.hasAlpha) {
+    // Original had no explicit transparencyMode but texture has alpha — use ALPHATEST.
+    mat.transparencyMode = 1
+    mat.alphaTest = original.alphaTest || 0.5
+  }
   mat.useRoughnessFromMetallicTextureAlpha = !!original.useRoughnessFromMetallicTextureAlpha
   mat.useRoughnessFromMetallicTextureGreen = !!original.useRoughnessFromMetallicTextureGreen
   mat.useMetallnessFromMetallicTextureBlue = !!original.useMetallnessFromMetallicTextureBlue
@@ -176,11 +191,46 @@ function createPilmiMaterial(scene, original, lmTex, aoTex) {
 
 /* ── instance conversion ──────────────────────────────────── */
 
+/**
+ * Build a fingerprint string from a mesh's actual geometry data (positions +
+ * indices).  Two meshes whose GLTF loader gave separate Geometry objects but
+ * that contain identical vertex/index buffers will produce the same key.
+ */
+function geometryFingerprint(mesh) {
+  const positions = mesh.getVerticesData('position')
+  const indices   = mesh.geometry.getIndices()
+  if (!positions || !positions.length) return null
+
+  const vLen = positions.length
+  const iLen = indices ? indices.length : 0
+  let fp = vLen + '|' + iLen
+
+  // Sample first & last few position floats (4 verts each side)
+  const nPos = Math.min(12, vLen)
+  for (let i = 0; i < nPos; i++) fp += '|' + positions[i].toFixed(5)
+  if (vLen > 24) {
+    for (let i = vLen - nPos; i < vLen; i++) fp += '|' + positions[i].toFixed(5)
+  }
+
+  // Sample first & last few indices
+  if (indices && iLen > 0) {
+    const nIdx = Math.min(6, iLen)
+    for (let i = 0; i < nIdx; i++) fp += '|' + indices[i]
+    if (iLen > 12) {
+      for (let i = iLen - nIdx; i < iLen; i++) fp += '|' + indices[i]
+    }
+  }
+
+  return fp
+}
+
 function convertDuplicatesToInstances(meshes) {
   const groups = new Map()
   for (const m of meshes) {
     if (m.isAnInstance || !m.geometry || m.skeleton) continue
-    const key = m.geometry.uniqueId + '|' + (m.material ? m.material.uniqueId : '-')
+    const fp = geometryFingerprint(m)
+    if (!fp) continue
+    const key = fp + '||' + (m.material ? m.material.uniqueId : '-')
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(m)
   }
@@ -202,7 +252,7 @@ function convertDuplicatesToInstances(meshes) {
       inst.scaling.copyFrom(src.scaling)
       inst.setEnabled(src.isEnabled())
       inst.parent = src.parent
-      src.dispose(false, true)
+      src.dispose(false, false)   // keep shared materials alive
       created.push(inst)
     }
   }
@@ -330,6 +380,17 @@ export class PilmiLoader {
 
     // Convert duplicate meshes → instances (preserves transforms)
     var newInstances = convertDuplicatesToInstances(renderMeshes)
+
+    // Upgrade any ALPHABLEND leaf/foliage materials among the ORIGINAL source meshes
+    // to pure ALPHATEST so they sort correctly vs water (render in opaque pass).
+    // The PILMI clones are already handled in createPilmiMaterial; this covers the
+    // original master meshes which remain visible in the scene with their original mat.
+    matMap.forEach(function (_pilmi, orig) {
+      if (orig.transparencyMode === 2 && orig.useAlphaFromAlbedoTexture && orig.albedoTexture?.hasAlpha) {
+        orig.transparencyMode = 1   // PBRMATERIAL_ALPHATEST
+        orig.alphaTest = orig.alphaTest || 0.5
+      }
+    })
 
     // Map JSON UV offsets to every live PILMI mesh & instance
     var pilmiMats = new Set(matMap.values())

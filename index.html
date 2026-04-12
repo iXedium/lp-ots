@@ -19,6 +19,7 @@
         width: min(60vw, 320px); height: auto; margin-bottom: 2rem;
         filter: drop-shadow(0 4px 24px rgba(0,0,0,0.25));
         animation: splash-bob 2.5s ease-in-out infinite;
+        visibility: hidden; /* JS shows it once src is confirmed */
       }
       @keyframes splash-bob {
         0%, 100% { transform: translateY(0); }
@@ -41,7 +42,7 @@
   <body>
     <!-- Splash / loading screen -->
     <div id="splash">
-      <img src="/textures/0-2_splash-screen.png" alt="Check the Label" id="splash-logo" />
+      <img alt="LP OTS" id="splash-logo" />
       <div id="splash-bar-wrap">
         <div id="splash-bar"></div>
       </div>

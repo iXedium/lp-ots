@@ -40,6 +40,34 @@ scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(
 )
 scene.environmentIntensity = 1.0
 
+// ── Splash logo probe ─────────────────────────────────────────
+// Tries web formats in priority order (.webp → .png → .jpg).
+// KTX2 cannot be decoded by <img> natively; if only KTX2 exists, exports a
+// .webp or .png alongside it and the probe will find it automatically.
+;(async function probeSplashLogo() {
+  const imgEl = document.getElementById('splash-logo')
+  if (!imgEl) return
+  const stem = `${base}textures/0-2_splash-screen`
+  for (const ext of ['.webp', '.png', '.jpg', '.jpeg']) {
+    try {
+      const r  = await fetch(stem + ext, { method: 'HEAD', cache: 'no-store' })
+      const ct = r.headers.get('content-type') || ''
+      if (r.ok && !ct.includes('text/html')) {
+        imgEl.src = stem + ext
+        imgEl.style.visibility = 'visible'
+        return
+      }
+    } catch { /* try next format */ }
+  }
+  // Check if only KTX2 exists
+  try {
+    const r = await fetch(stem + '.ktx2', { method: 'HEAD', cache: 'no-store' })
+    if (r.ok && !(r.headers.get('content-type') || '').includes('text/html')) {
+      console.info('[Splash] Splash logo exists as KTX2 only — export a .webp/.png alongside it to display it.')
+    }
+  } catch { /* ignore */ }
+})()
+
 // ── Scene modules ────────────────────────────────────────────
 const camera   = setupCamera(scene, canvas)
 const skybox   = setupSky(scene)
@@ -173,7 +201,9 @@ engine.runRenderLoop(() => {
   const active = !modelsLoaded || !window.__rodEnabled || needsRender || elapsed < ROD.cooldownMs
 
   if (active) {
+    const dcBefore = engine._drawCalls?.current ?? 0
     scene.render()
+    window.__dcPerFrame = (engine._drawCalls?.current ?? 0) - dcBefore
     needsRender = false
   }
   window.__isRenderIdle = !active && modelsLoaded
