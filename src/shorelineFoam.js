@@ -179,15 +179,4 @@ export function applyFoamToWater(scene, camera, meshes) {
   }
 
   console.log('[Foam] Water shader applied to', meshes.length, 'water meshes')
-
-  // The under-water mesh is a 3D volume whose side-faces render in the opaque pass
-  // and write depth values closer to camera than the water surface when viewed at
-  // shallow angles (shore view). This blocks the foam from rendering through
-  // alpha-test leaf cutout holes.  Disabling depth writes on that mesh lets the
-  // foam always win the depth test at those pixels.
-  const underWaterMesh = scene.meshes.find(m => m.name === 'under-water')
-  if (underWaterMesh?.material) {
-    underWaterMesh.material.disableDepthWrite = true
-    console.log('[Foam] Disabled depth write on under-water-mat to prevent foam occlusion')
-  }
 }
