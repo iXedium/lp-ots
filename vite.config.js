@@ -11,6 +11,41 @@ const __dirname  = dirname(__filename)
 const VIRTUAL_ID  = 'virtual:model-list'
 const RESOLVED_ID = '\0' + VIRTUAL_ID
 
+// ── Texture-manifest virtual module ──────────────────────────────────────────
+// Exports a Set of filenames in public/textures/ so autoMaterial can do O(1)
+// lookups instead of firing hundreds of HEAD requests at runtime.
+const TEX_VIRTUAL_ID  = 'virtual:texture-manifest'
+const TEX_RESOLVED_ID = '\0' + TEX_VIRTUAL_ID
+
+function textureManifestPlugin() {
+  let serverRef
+  const texDir = resolve(__dirname, 'public/textures')
+  const scan = () => {
+    try { return readdirSync(texDir).filter(f => /\.(ktx2|webp|png|jpg|jpeg)$/i.test(f)) }
+    catch { return [] }
+  }
+  const refresh = (file) => {
+    if (!serverRef || !/\.(ktx2|webp|png|jpg|jpeg)$/i.test(file)) return
+    const mod = serverRef.moduleGraph.getModuleById(TEX_RESOLVED_ID)
+    if (mod) serverRef.moduleGraph.invalidateModule(mod)
+    serverRef.ws.send({ type: 'full-reload' })
+  }
+  return {
+    name: 'texture-manifest',
+    resolveId(id) { if (id === TEX_VIRTUAL_ID) return TEX_RESOLVED_ID },
+    load(id) {
+      if (id !== TEX_RESOLVED_ID) return null
+      return `export default new Set(${JSON.stringify(scan())})`
+    },
+    configureServer(server) {
+      serverRef = server
+      server.watcher.add(texDir)
+      server.watcher.on('add', refresh)
+      server.watcher.on('unlink', refresh)
+    },
+  }
+}
+
 function modelListPlugin() {
   let serverRef
   const refreshModelList = (file) => {
@@ -68,6 +103,7 @@ export default defineConfig(({ command }) => ({
   cacheDir: '.vite_cache',
   plugins: [
     modelListPlugin(),
+    textureManifestPlugin(),
     // Force no-cache on every response (including static/public assets)
     // Wraps writeHead to override any cache headers set by Vite's sirv
     {

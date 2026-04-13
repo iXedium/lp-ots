@@ -23,25 +23,20 @@ import '@babylonjs/core/Materials/Textures/Loaders/ktxTextureLoader'
 
 import { SETTINGS }        from './constants'
 import { ALL_SUFFIXES, SUFFIX_TO_SLOT } from './mapTypes'
+import TEXTURE_FILES from 'virtual:texture-manifest'
 
 const EXTENSIONS = ['.ktx2', '.webp', '.png', '.jpg']
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Probe for a texture file, trying extensions in priority order.
- * @returns {Promise<string|null>}  first URL that exists, or null
+ * Look up a texture file using the build-time manifest (zero network requests).
+ * @returns {string|null}  first URL that exists, or null
  */
-async function probeTexture(basePath) {
+function probeTexture(basePath, baseName) {
   for (const ext of EXTENSIONS) {
-    const url = basePath + ext
-    try {
-      const res = await fetch(url, { method: 'HEAD', cache: 'no-store' })
-      if (!res.ok) continue
-      const ct = (res.headers.get('content-type') || '').toLowerCase()
-      if (ct.includes('text/html')) continue   // Vite SPA fallback
-      return url
-    } catch { /* next ext */ }
+    const filename = baseName + ext
+    if (TEXTURE_FILES.has(filename)) return basePath + filename
   }
   return null
 }
@@ -70,20 +65,18 @@ function loadTex(scene, url) {
  * @returns {Promise<{textures: Record<string,Texture>, maps: Record<string,string>}|null>}
  */
 async function discoverTextures(scene, base, glbName) {
-  const texBase = base + 'textures/' + glbName + '_'
+  const texBase = base + 'textures/'
+  const namePrefix = glbName + '_'
 
-  // Probe all suffixes in parallel; try UPPER, lower, and Title-case variants
-  // (Vite enforces case-sensitive paths even on Windows, so we must match exactly)
-  const probeResults = await Promise.all(
-    ALL_SUFFIXES.map(async (suffix) => {
-      const titleCase = suffix[0] + suffix.slice(1).toLowerCase()
-      for (const variant of [suffix, suffix.toLowerCase(), titleCase]) {
-        const url = await probeTexture(texBase + variant)
-        if (url) return { suffix, url }
-      }
-      return null
-    }),
-  )
+  // Look up all suffixes against the build-time manifest (no network requests)
+  const probeResults = ALL_SUFFIXES.map((suffix) => {
+    const titleCase = suffix[0] + suffix.slice(1).toLowerCase()
+    for (const variant of [suffix, suffix.toLowerCase(), titleCase]) {
+      const url = probeTexture(texBase, namePrefix + variant)
+      if (url) return { suffix, url }
+    }
+    return null
+  })
 
   // Map to slots: first discovered URL per slot wins
   const found = Object.create(null)          // slot → url
