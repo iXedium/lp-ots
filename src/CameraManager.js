@@ -137,36 +137,40 @@ export class CameraManager {
     const tl = gsap.timeline()
     this._tl = tl
 
+    const proxy = { t: 0 }
+    tl.to(proxy, { t: 1, duration, ease: easing }, 0)
+
     if (useWorld) {
       // ── World-space interpolation ───────────────────────────
-      // Lerp camera world position + target directly.
       const startShot = this.captureShot()
       const startPos = shotToWorldPos(startShot)
       const endPos = shotToWorldPos(shot)
       const startTarget = cam.target.clone()
       const endTarget = new Vector3(shot.target.x, shot.target.y, shot.target.z)
 
-      const proxy = { t: 0 }
-      tl.to(proxy, {
-        t: 1,
-        duration,
-        ease: easing,
-        onUpdate: () => {
-          const p = proxy.t
-          const pos = Vector3.Lerp(startPos, endPos, p)
-          const target = Vector3.Lerp(startTarget, endTarget, p)
-          cam.target.copyFrom(target)
-          const params = worldPosToArcParams(pos, target)
-          cam.alpha = params.alpha
-          cam.beta = params.beta
-          cam.radius = params.radius
-          window.__requestRender?.()
-        },
+      let prevAlpha = cam.alpha
+
+      tl.eventCallback('onUpdate', () => {
+        const p = proxy.t
+        const pos = Vector3.Lerp(startPos, endPos, p)
+        const target = Vector3.Lerp(startTarget, endTarget, p)
+        cam.target.copyFrom(target)
+        const params = worldPosToArcParams(pos, target)
+        // Keep alpha continuous across the ±π boundary
+        let alpha = params.alpha
+        let da = alpha - prevAlpha
+        da -= Math.round(da / (2 * Math.PI)) * 2 * Math.PI
+        alpha = prevAlpha + da
+        prevAlpha = alpha
+        cam.alpha = alpha
+        cam.beta = params.beta
+        cam.radius = params.radius
+        window.__requestRender?.()
       })
     } else {
       // ── Arc-rotate parameter interpolation ──────────────────
 
-      // Normalise target alpha to the shortest angular path (avoid 360° sweep)
+      // Normalise target alpha to shortest angular path (avoid 360° sweep)
       let targetAlpha = shot.alpha
       let deltaAlpha = targetAlpha - cam.alpha
       deltaAlpha -= Math.round(deltaAlpha / (2 * Math.PI)) * 2 * Math.PI
@@ -176,52 +180,34 @@ export class CameraManager {
       const dBeta = shot.beta - cam.beta
       const angDist = Math.sqrt(dAlpha * dAlpha + dBeta * dBeta)
 
-      // Alpha / Beta
-      tl.to(cam, {
-        alpha: targetAlpha,
-        beta: shot.beta,
-        duration,
-        ease: easing,
-        onUpdate: () => window.__requestRender?.(),
-      }, 0)
+      // Capture start values for manual interpolation
+      const startAlpha = cam.alpha
+      const startBeta = cam.beta
+      const startRadius = cam.radius
+      const startTX = cam.target.x
+      const startTY = cam.target.y
+      const startTZ = cam.target.z
+      const endRadius = shot.radius
 
-      // Radius (with optional arc swell)
+      // Arc swell
+      let swellMax = 0
       if (useArc && angDist > cfg.arcAngleThreshold) {
-        const startR = cam.radius
-        const endR = shot.radius
         const arcScale = Math.min((angDist - cfg.arcAngleThreshold) * cfg.arcSensitivity, cfg.arcMaxSwell)
-        const swellMax = Math.max(startR, endR) * arcScale
-        const proxy = { t: 0 }
-        tl.to(proxy, {
-          t: 1,
-          duration,
-          ease: easing,
-          onUpdate: () => {
-            const p = proxy.t
-            const linear = startR + (endR - startR) * p
-            const bell = Math.sin(p * Math.PI)
-            cam.radius = linear + swellMax * bell
-            window.__requestRender?.()
-          },
-        }, 0)
-      } else {
-        tl.to(cam, {
-          radius: shot.radius,
-          duration,
-          ease: easing,
-          onUpdate: () => window.__requestRender?.(),
-        }, 0)
+        swellMax = Math.max(startRadius, endRadius) * arcScale
       }
 
-      // Target
-      tl.to(cam.target, {
-        x: shot.target.x,
-        y: shot.target.y,
-        z: shot.target.z,
-        duration,
-        ease: easing,
-        onUpdate: () => window.__requestRender?.(),
-      }, 0)
+      tl.eventCallback('onUpdate', () => {
+        const p = proxy.t
+        cam.alpha = startAlpha + (targetAlpha - startAlpha) * p
+        cam.beta = startBeta + (shot.beta - startBeta) * p
+        cam.target.x = startTX + (shot.target.x - startTX) * p
+        cam.target.y = startTY + (shot.target.y - startTY) * p
+        cam.target.z = startTZ + (shot.target.z - startTZ) * p
+
+        const linearR = startRadius + (endRadius - startRadius) * p
+        cam.radius = linearR + swellMax * Math.sin(p * Math.PI)
+        window.__requestRender?.()
+      })
     }
 
     return new Promise((resolve) => {

@@ -1,0 +1,15 @@
+{
+  "_comment": "Models hidden during the intro sequence (splash → sky → beach → overview). They become visible once the camera lands at the overview orbit. Set hiddenDuringIntro to true to hide a model.",
+  "models": [
+    { "name": "chars-secret-beach",    "hiddenDuringIntro": false },
+    { "name": "pbr-buildings",         "hiddenDuringIntro": false },
+    { "name": "pbr-terrain",           "hiddenDuringIntro": false },
+    { "name": "pilmi-deli-items",      "hiddenDuringIntro": true },
+    { "name": "pilmi-deli-others",     "hiddenDuringIntro": true },
+    { "name": "pilmi-foliage-rocks",   "hiddenDuringIntro": false },
+    { "name": "pilmi-hotel-interior",  "hiddenDuringIntro": true },
+    { "name": "pilmi-island-props",    "hiddenDuringIntro": true },
+    { "name": "under-water",           "hiddenDuringIntro": false },
+    { "name": "water",                 "hiddenDuringIntro": false }
+  ]
+}

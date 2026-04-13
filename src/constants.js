@@ -20,6 +20,8 @@ export const SETTINGS = {
     wheelPrecision: 3,                  // lower = faster zoom
     pinchPrecision: 8,
     panningSensibility: 200,              // RMB to pan; higher = slower
+    angularSensibilityX: 1500,            // orbit rotation slowness (X); higher = more deliberate (mobile-friendly)
+    angularSensibilityY: 1500,            // orbit rotation slowness (Y); higher = more deliberate (mobile-friendly)
     minZ: 0.1,
 
     // WASD + QE drone control speed (world units per second)
@@ -29,18 +31,18 @@ export const SETTINGS = {
     dev_lowerBetaLimit: 0,
     dev_upperBetaLimit: Math.PI,
     dev_lowerRadiusLimit: 1,
-    dev_upperRadiusLimit: 500,
+    dev_upperRadiusLimit: 200,
   },
 
   // ── Fly-to camera animations ─────────────────────────────────
   flyTo: {
     defaultDuration: 5.0,               // seconds (longer = smoother)
-    easing: 'power2.inOut',             // smooth ease-in-out
+    easing: 'power2.inOut',             // GSAP ease string
     // Smart arc — only adds radius swell when the angular distance is large.
     // The swell follows the same easing as the angle tween so the peak
     // occurs at the spatial midpoint of the orbit, not at a fixed time.
     arcAngleThreshold: 0.5,             // radians — minimum angle change to trigger arc
-    arcSensitivity: 0.25,              // how much angle change maps to swell (lower = gentler)
+    arcSensitivity: 0.1,              // how much angle change maps to swell (lower = gentler)
     arcMaxSwell: 0.3,                  // maximum swell as fraction of max(startR, endR)
   },
 
@@ -74,13 +76,20 @@ export const SETTINGS = {
     bobbingAmplitude: 0.08,             // world units
     bobbingSpeed: 1.4,                  // cycles per second
     rotationSpeed: 0.4,                 // radians per second
-    defaultHitScreenRadius: 52,         // pixels — tap detection radius
+    defaultHitScreenRadius: 52,         // pixels — tap detection radius (fallback)
+    defaultHitBoxSize: { x: 3, y: 6, z: 3 },  // world units — invisible click box per pin
     meshScale: 1.0,                     // scale multiplier for pin mesh (pin.glb is small)
-    lightIntensity: 1.5,                // pin directional light intensity
-    shadowMapSize: 1024,                // shadow map resolution
+    metallic: 0.0,                      // PBR metalness (0 = dielectric, 1 = metal)
+    roughness: 0.6,                     // PBR roughness (0 = mirror, 1 = matte)
+    animatePins: false,                  // true = bobbing+rotation, false = static billboard-Y
+    lightIntensity: 0,                // pin directional light intensity
     // Directional light direction/position extracted from pins.glb light-dir
-    lightDirection: { x: 0.5264, y: -0.6270, z: -0.5743 },
+    lightDirection: { x: -0.5264, y: 0.6270, z: 0.5743 },
     lightPosition: { x: -26.319, y: 31.350, z: 28.714 },
+    // Environment (IBL) contribution to pin materials (0 = no env reflections)
+    environmentIntensity: 1.0,
+    // Ambient color added to all pin materials (subtle fill light)
+    ambientColor: { r: 0.15, g: 0.15, b: 0.2 },
     // Status colors — diffuse color per pin state
     statusColors: {
       invisible: { r: 0.3, g: 0.3, b: 0.3 },
@@ -93,11 +102,11 @@ export const SETTINGS = {
     // Emissive multiplier per status (fraction of diffuse → emissive)
     statusEmissiveScale: {
       invisible: 0,
-      disabled:  0.1,
-      locked:    0.15,
-      normal:    0.6,
-      active:    0.5,
-      completed: 0.4,
+      disabled:  0,
+      locked:    0,
+      normal:    0.0,
+      active:    0,
+      completed: 0,
     },  },
 
   // ── Sky ──────────────────────────────────────────────────────
@@ -119,7 +128,7 @@ export const SETTINGS = {
   // ── Fog (horizon haze only) ──────────────────────────────────
   fog: {
     enabled: false,
-    density: 0.0008,                      // very low — near objects stay clear
+    density: 0.0028,                      // very low — near objects stay clear
     color: { r: 0.60, g: 0.82, b: 0.95 }, // matches sky horizon for seamless blending
   },
 

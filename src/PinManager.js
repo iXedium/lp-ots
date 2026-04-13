@@ -1,12 +1,11 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector'
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color'
 import { Mesh } from '@babylonjs/core/Meshes/mesh'
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder'
 import { Matrix, Viewport } from '@babylonjs/core/Maths/math'
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader'
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight'
-import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator'
-import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent'
 import '@babylonjs/loaders/glTF'
 import { SETTINGS } from './constants'
 import { IS_DEV } from './isDev'
@@ -70,6 +69,9 @@ export class PinManager {
     /** @type {Map<string, object>} pinId → pin data */
     this.pinDataMap = new Map()
 
+    /** @type {Map<string, Mesh>} pinId → hit-box mesh for click detection */
+    this.hitMeshes = new Map()
+
     /**
      * Camera shots extracted from GLB cameras.
      * Keys: 'intro-1', 'intro-2', 'intro-3' (Cam-0-1/2/3)
@@ -81,8 +83,6 @@ export class PinManager {
 
     /** Directional light created from light-dir in GLB */
     this.pinLight = null
-    /** Shadow generator for pin light */
-    this.pinShadowGen = null
 
     this._startTime = performance.now()
     this._bobbingObserver = null
@@ -369,15 +369,7 @@ export class PinManager {
     light.diffuse = new Color3(1, 0.95, 0.85)
     light.specular = new Color3(0.5, 0.5, 0.5)
 
-    // Shadow generator
-    const shadowGen = new ShadowGenerator(SETTINGS.pins.shadowMapSize ?? 1024, light)
-    shadowGen.usePercentageCloserFiltering = true
-    shadowGen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM
-    shadowGen.bias = 0.001
-    shadowGen.normalBias = 0.02
-
     this.pinLight = light
-    this.pinShadowGen = shadowGen
 
     // Dispose the original GLB light if it's a BJS light (to avoid doubling)
     if (lightNode.dispose && lightNode !== light) {
@@ -406,18 +398,34 @@ export class PinManager {
     light.diffuse = new Color3(1, 0.95, 0.85)
     light.specular = new Color3(0.5, 0.5, 0.5)
 
-    const shadowGen = new ShadowGenerator(cfg.shadowMapSize ?? 1024, light)
-    shadowGen.usePercentageCloserFiltering = true
-    shadowGen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM
-    shadowGen.bias = 0.001
-    shadowGen.normalBias = 0.02
-
     this.pinLight = light
-    this.pinShadowGen = shadowGen
 
     if (IS_DEV) {
       console.log(`[Pins] Pin light from settings: dir=(${dir.x.toFixed(2)}, ${dir.y.toFixed(2)}, ${dir.z.toFixed(2)})`)
     }
+  }
+
+  /** Create invisible hit-box meshes from JSON hitBox data for each pin */
+  _createHitBoxes() {
+    const defaultSize = SETTINGS.pins.defaultHitBoxSize || { x: 3, y: 6, z: 3 }
+    for (const pin of this.pins) {
+      const hb = pin.hitBox || {}
+      const size = hb.size || defaultSize
+      const offset = hb.offset || { x: 0, y: 0, z: 0 }
+
+      const box = MeshBuilder.CreateBox(`hitbox_${pin.id}`, {
+        width: size.x, height: size.y, depth: size.z,
+      }, this.scene)
+      box.position = new Vector3(
+        pin.position.x + offset.x,
+        pin.position.y + offset.y,
+        pin.position.z + offset.z,
+      )
+      box.isVisible = false
+      box.isPickable = true
+      this.hitMeshes.set(pin.id, box)
+    }
+    if (IS_DEV) console.log(`[Pins] Created ${this.hitMeshes.size} hit boxes from JSON`)
   }
 
   // ── Instance creation ─────────────────────────────────────
@@ -431,17 +439,23 @@ export class PinManager {
   }
 
   _createPinInstance(pin) {
-    const mat = new StandardMaterial(`pinMat_${pin.id}`, this.scene)
+    const cfg = SETTINGS.pins
+    const mat = new PBRMaterial(`pinMat_${pin.id}`, this.scene)
     const color = STATUS_COLORS[pin.status] || STATUS_COLORS.locked
     const emScale = STATUS_EMISSIVE_SCALE[pin.status] ?? 0.2
-    mat.diffuseColor = color
+    mat.albedoColor = color
     mat.emissiveColor = color.scale(emScale)
-    mat.specularColor = Color3.Black()
+    mat.metallic = cfg.metallic ?? 0.0
+    mat.roughness = cfg.roughness ?? 0.6
+    mat.environmentIntensity = cfg.environmentIntensity ?? 0.5
+    // Ambient contribution (scene.ambientColor * mat.ambientColor)
+    const amb = cfg.ambientColor || { r: 0.15, g: 0.15, b: 0.2 }
+    mat.ambientColor = new Color3(amb.r, amb.g, amb.b)
 
     const parent = new Mesh(`pin_${pin.id}`, this.scene)
     parent.position = new Vector3(pin.position.x, pin.position.y, pin.position.z)
 
-    const scale = SETTINGS.pins.meshScale ?? 1
+    const scale = cfg.meshScale ?? 1
 
     for (const tmpl of this._templateMeshes) {
       if (!tmpl.getTotalVertices || tmpl.getTotalVertices() === 0) continue
@@ -455,17 +469,8 @@ export class PinManager {
       clone.isPickable = false
       clone.material = mat
       if (scale !== 1) clone.scaling.setAll(scale)
-
-      // Shadow: pin meshes receive & cast shadows from pin light only
-      clone.receiveShadows = true
-      if (this.pinShadowGen) {
-        this.pinShadowGen.addShadowCaster(clone)
-      }
+      clone.receiveShadows = false
     }
-
-    // NOTE: Do NOT use BILLBOARDMODE_Y — it rotates around the world Y axis
-    // through the world origin, not the mesh's local Y axis.
-    // Instead, we manually rotate in the bobbing observer.
 
     const isVis = pin.status !== 'invisible'
     parent.isVisible = isVis
@@ -473,57 +478,53 @@ export class PinManager {
     parent.isPickable = false
     parent._pinBaseY = pin.position.y
 
-    // Exclude pin light from affecting non-pin scene meshes
-    // (done via includedOnlyMeshes on the light after all pins are built)
-
     return parent
   }
 
   /**
-   * Make pin light illuminate the entire scene (pins + island) so that
-   * pins cast shadows onto scene geometry.  We do NOT set includedOnlyMeshes
-   * because that would prevent scene meshes from receiving the shadow.
-   * The light already has low-ish intensity so it won't blow out the island.
+   * Make pin light illuminate ONLY pin meshes via includedOnlyMeshes.
    */
-  _setupLightForShadows() {
+  _setupLightForPins() {
     if (!this.pinLight) return
-    // Ensure all pin child meshes are shadow casters
+    const pinChildMeshes = []
     for (const [, parent] of this.meshes) {
       for (const child of parent.getChildMeshes()) {
-        child.receiveShadows = true
-        if (this.pinShadowGen) this.pinShadowGen.addShadowCaster(child)
+        pinChildMeshes.push(child)
       }
     }
-    // Make nearby scene meshes receive shadows from the pin light
-    for (const mesh of this.scene.meshes) {
-      if (mesh.name === '__root__' || mesh.name.includes('sky') || mesh.name.includes('water')) continue
-      mesh.receiveShadows = true
-    }
-    if (IS_DEV) console.log(`[Pins] Pin light active for shadows on scene`)
+    this.pinLight.includedOnlyMeshes = pinChildMeshes
+    if (IS_DEV) console.log(`[Pins] Pin light restricted to ${pinChildMeshes.length} pin meshes`)
   }
 
-  /** Start the bobbing + rotation animation loop */
+  /** Start the bobbing + face-camera animation loop */
   _startBobbing() {
-    // Setup light so pins cast shadows on scene geometry
-    this._setupLightForShadows()
+    // Restrict pin light to only illuminate pin meshes
+    this._setupLightForPins()
 
     const cfg = SETTINGS.pins
+    const animated = cfg.animatePins !== false   // default true
     const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)')
     let prefersReduced = mq?.matches ?? false
     mq?.addEventListener?.('change', (e) => { prefersReduced = e.matches })
 
     this._bobbingObserver = this.scene.onBeforeRenderObservable.add(() => {
-      if (prefersReduced) return
-
-      const t = (performance.now() - this._startTime) / 1000
+      const camPos = this.camera.position
       for (const [id, mesh] of this.meshes) {
         if (!mesh.isEnabled()) continue
-        mesh.position.y = mesh._pinBaseY + Math.sin(t * cfg.bobbingSpeed * Math.PI * 2) * cfg.bobbingAmplitude
-        mesh.rotation.y += cfg.rotationSpeed * this.scene.getEngine().getDeltaTime() / 1000
+
+        if (animated && !prefersReduced) {
+          // Bobbing + rotation animation (triggers continuous render)
+          const t = (performance.now() - this._startTime) / 1000
+          mesh.position.y = mesh._pinBaseY + Math.sin(t * cfg.bobbingSpeed * Math.PI * 2) * cfg.bobbingAmplitude
+          mesh.rotation.y += cfg.rotationSpeed * this.scene.getEngine().getDeltaTime() / 1000
+          window.__requestRender?.()
+        } else {
+          // Static: billboard Y — always face camera around Y axis only
+          const dx = camPos.x - mesh.position.x
+          const dz = camPos.z - mesh.position.z
+          mesh.rotation.y = Math.atan2(dx, dz)
+        }
       }
-      // NOTE: intentionally no __requestRender() here — bobbing updates
-      // opportunistically when the scene renders for other reasons (user interaction,
-      // camera animation). This preserves render-on-demand idle savings.
     })
   }
 
@@ -635,7 +636,7 @@ export class PinManager {
     if (mat) {
       const color = STATUS_COLORS[status] || STATUS_COLORS.locked
       const emScale = STATUS_EMISSIVE_SCALE[status] ?? 0.2
-      mat.diffuseColor = color
+      mat.albedoColor = color
       mat.emissiveColor = color.scale(emScale)
     }
 
@@ -696,6 +697,35 @@ export class PinManager {
   hitTest(screenX, screenY) {
     if (!this.interactionEnabled) return null
 
+    // ── Ray-based picking using hit-box meshes if available ──
+    if (this.hitMeshes.size > 0) {
+      // Build list of pickable hit meshes for visible, clickable pins
+      const pickableMeshes = []
+      const meshToPinMap = new Map()
+      for (const pin of this.pins) {
+        if (pin.status === 'invisible') continue
+        if (this.clickableFilter && !this.clickableFilter.includes(pin.id)) continue
+        if (!IS_DEV && !CLICKABLE_STATUSES.has(pin.status)) continue
+
+        const hitMesh = this.hitMeshes.get(pin.id)
+        if (!hitMesh) continue
+        pickableMeshes.push(hitMesh)
+        meshToPinMap.set(hitMesh, pin)
+      }
+
+      if (pickableMeshes.length) {
+        // scene.pick() expects CSS canvas coordinates, not device pixels.
+        // getHardwareScalingLevel() == 1/DPR when adaptToDeviceRatio=true.
+        const hwScale = this.scene.getEngine().getHardwareScalingLevel?.() ?? 1
+        const pickResult = this.scene.pick(screenX * hwScale, screenY * hwScale, (mesh) => pickableMeshes.includes(mesh))
+        if (pickResult?.hit && pickResult.pickedMesh) {
+          return meshToPinMap.get(pickResult.pickedMesh) || null
+        }
+        return null
+      }
+    }
+
+    // ── Fallback: screen-space radius hit test ──────────────
     const engine = this.engine
     const w = engine.getRenderWidth()
     const h = engine.getRenderHeight()
@@ -802,6 +832,7 @@ export class PinManager {
         visible: p.num === 1,
         position: p.position,
         hitScreenRadius: p.hitScreenRadius || SETTINGS.pins.defaultHitScreenRadius,
+        hitBox: p.hitBox || null,
       })
     }
     for (const pin of this.pins) {
@@ -816,6 +847,10 @@ export class PinManager {
 
     // Create pin instances
     this._createMeshes()
+
+    // Create hit-box meshes from JSON hitBox data
+    this._createHitBoxes()
+
     this._startBobbing()
 
     if (IS_DEV) {
@@ -882,7 +917,10 @@ export class PinManager {
       mesh.dispose()
     }
     this.meshes.clear()
-    this.pinShadowGen?.dispose()
+    for (const [, hitMesh] of this.hitMeshes) {
+      hitMesh.dispose()
+    }
+    this.hitMeshes.clear()
     this.pinLight?.dispose()
     if (this._templateMeshes) {
       this._templateMeshes.forEach(m => m.dispose())

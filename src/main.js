@@ -25,6 +25,7 @@ import { createWaterTweaker }          from './waterTweaker'
 import { StateMachine, STATES }        from './StateMachine'
 import { sceneAPI }                    from './sceneAPI'
 import { IS_DEV }                      from './isDev'
+import gsap from 'gsap'
 import { CameraManager }              from './CameraManager'
 import { PinManager }                 from './PinManager'
 import { Vector3 }                    from '@babylonjs/core/Maths/math.vector'
@@ -164,11 +165,12 @@ function hideActionButton() {
 // ── Pointer / tap detection for pins ─────────────────────────
 let _pointerDownPos = null
 let _pointerDownTime = 0
-const TAP_MOVE_THRESHOLD = 8   // px
-const TAP_TIME_THRESHOLD = 400 // ms
+const TAP_MOVE_THRESHOLD_MOUSE = 8    // px — precision pointer
+const TAP_MOVE_THRESHOLD_TOUCH = 24   // px — generous for finger jitter on mobile
+const TAP_TIME_THRESHOLD = 500        // ms — slightly longer for mobile users
 
 canvas.addEventListener('pointerdown', (e) => {
-  _pointerDownPos = { x: e.clientX, y: e.clientY }
+  _pointerDownPos = { x: e.clientX, y: e.clientY, pointerType: e.pointerType }
   _pointerDownTime = performance.now()
 })
 
@@ -178,9 +180,11 @@ canvas.addEventListener('pointerup', (e) => {
   const dy = e.clientY - _pointerDownPos.y
   const dist = Math.sqrt(dx * dx + dy * dy)
   const elapsed = performance.now() - _pointerDownTime
+  const isTouch = _pointerDownPos.pointerType === 'touch'
+  const threshold = isTouch ? TAP_MOVE_THRESHOLD_TOUCH : TAP_MOVE_THRESHOLD_MOUSE
   _pointerDownPos = null
 
-  if (dist > TAP_MOVE_THRESHOLD || elapsed > TAP_TIME_THRESHOLD) return
+  if (dist > threshold || elapsed > TAP_TIME_THRESHOLD) return
   if (cameraManager.isFlying) return
 
   // Screen-space hit test
@@ -192,13 +196,14 @@ canvas.addEventListener('pointerup', (e) => {
 
   const hitPin = pinManager.hitTest(sx, sy)
   if (hitPin) {
-    if (IS_DEV) console.log(`[Tap] Hit pin: ${hitPin.id}`)
+    if (IS_DEV) console.log(`[Tap] Hit pin: ${hitPin.id} (${isTouch ? 'touch' : 'mouse'})`)
     handlePinTap(hitPin)
   }
 })
 
-// Desktop hover cursor
+// Desktop hover cursor (skip on touch devices)
 canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'touch') return
   if (!pinManager.interactionEnabled || e.buttons) return
   const rect = canvas.getBoundingClientRect()
   const scaleX = engine.getRenderWidth() / rect.width
@@ -270,6 +275,19 @@ sceneAPI.addEventListener('_cmd:flyToIsland', () => {
     cameraManager.restoreOrbitLimits()
     stateMachine.transitionTo(STATES.ORBIT_TUTORIAL)
 
+    // Fade in meshes hidden during intro via material alpha
+    const fadedMaterials = new Set()
+    for (const mesh of _introHiddenMeshes) {
+      mesh.isVisible = true
+      if (mesh.material && !fadedMaterials.has(mesh.material)) {
+        fadedMaterials.add(mesh.material)
+        mesh.material.alpha = 0
+        gsap.to(mesh.material, { alpha: 1, duration: 1.5, ease: 'power2.out', onUpdate: () => window.__requestRender?.() })
+      }
+    }
+    _introHiddenMeshes = []
+    window.__requestRender?.()
+
     // Initialize sequential pin progression: only pin-1 visible
     pinManager.initProgression()
     pinManager.interactionEnabled = true
@@ -281,6 +299,9 @@ sceneAPI.addEventListener('_cmd:flyToIsland', () => {
 
 /** Track which pin was active before returning */
 let _activePinId = null
+
+/** Meshes hidden during intro (restored when flyToIsland completes) */
+let _introHiddenMeshes = []
 
 sceneAPI.addEventListener('_cmd:returnFromPin', () => {
   if (stateMachine.current !== STATES.REACT_CONTENT) {
@@ -407,6 +428,34 @@ loadAllModels(scene, base, MODEL_NAMES, {
     }
     if (!pinsLoadedFromJson) {
       console.error('[Pins] pins.json missing or invalid — pins will not appear')
+    }
+
+    // ── Intro visibility: hide marked models until overview ──
+    try {
+      const ivResp = await fetch(`${base}json/introVisibility.json`)
+      if (ivResp.ok) {
+        const ct = ivResp.headers.get('content-type') || ''
+        if (!ct.includes('text/html')) {
+          const ivJson = await ivResp.json()
+          const hiddenNames = new Set(
+            (ivJson.models || []).filter(m => m.hiddenDuringIntro).map(m => m.name),
+          )
+          if (hiddenNames.size) {
+            for (const [name, data] of Object.entries(modelData)) {
+              if (!hiddenNames.has(name)) continue
+              for (const mesh of (data.refs || [])) {
+                if (mesh.isVisible !== false) {
+                  _introHiddenMeshes.push(mesh)
+                  mesh.isVisible = false
+                }
+              }
+            }
+            if (IS_DEV) console.log(`[Intro] Hidden ${_introHiddenMeshes.length} meshes from: ${[...hiddenNames].join(', ')}`)
+          }
+        }
+      }
+    } catch (err) {
+      if (IS_DEV) console.warn('[Intro] Failed to load introVisibility.json:', err)
     }
 
     // ── Intro sequence (cameras from introTimeline.js) ───────

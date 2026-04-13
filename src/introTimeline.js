@@ -56,9 +56,9 @@ export const INTRO_TIMELINE = {
 
   // ── Phase 4: Beach → Overview (beachCam → overviewCam) ────
   beachToOverview: {
-    duration: 5,                  // seconds
-    easing: 'circ.inOut',
-    arc: false,                      // radius arc for dramatic island reveal
+    duration: 4,                  // seconds
+    easing: 'power1.inOut',
+    arc: true,                      // radius arc for dramatic island reveal
   },
 
   // ── Phase 5: Pin visit return button ──────────────────────

@@ -82,7 +82,7 @@
         "radius": 112.330,
         "target": { "x": -64.252, "y": 0, "z": 73.621 },
         "duration": null,
-        "easing": "power2.inOut",
+        "easing": null,
         "arc": false
       },
       {
@@ -91,7 +91,7 @@
         "radius": 35.286,
         "target": { "x": -5.935, "y": 0, "z": -32.205 },
         "duration": null,
-        "easing": "power2.inOut",
+        "easing": null,
         "arc": false
       }
     ],
@@ -108,7 +108,7 @@
         "radius": 20.000,
         "target": { "x": -4.011, "y": 4.185, "z": -12.844 },
         "duration": null,
-        "easing": "power2.inOut",
+        "easing": null,
         "arc": false
       },
       {
@@ -117,7 +117,7 @@
         "radius": 106.073,
         "target": { "x": -23.053, "y": 0, "z": -105.403 },
         "duration": null,
-        "easing": "power2.inOut",
+        "easing": null,
         "arc": false
       }
     ]

@@ -18,6 +18,12 @@ export function setupCamera(scene, canvas) {
   camera.panningSensibility = c.panningSensibility
   camera.minZ              = c.minZ
 
+  // Mobile-friendly: increase angular sensitivity so small finger jitter
+  // doesn't trigger orbit rotation (higher value = slower rotation response).
+  // Defaults are ~1000; increase for touch-friendly behaviour.
+  camera.angularSensibilityX = c.angularSensibilityX ?? 1000
+  camera.angularSensibilityY = c.angularSensibilityY ?? 1000
+
   return camera
 }
 
