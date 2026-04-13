@@ -16,12 +16,89 @@ export const SETTINGS = {
     upperBetaLimit: 75 * (Math.PI / 180), // lowest view   (15° elevation)
 
     lowerRadiusLimit: 10,
-    upperRadiusLimit: 250,
+    upperRadiusLimit: 500,
     wheelPrecision: 3,                  // lower = faster zoom
     pinchPrecision: 8,
     panningSensibility: 200,              // RMB to pan; higher = slower
     minZ: 0.1,
+
+    // WASD + QE drone control speed (world units per second)
+    droneSpeed: 15,
+
+    // Dev mode limits (looser for free exploration)
+    dev_lowerBetaLimit: 0,
+    dev_upperBetaLimit: Math.PI,
+    dev_lowerRadiusLimit: 1,
+    dev_upperRadiusLimit: 500,
   },
+
+  // ── Fly-to camera animations ─────────────────────────────────
+  flyTo: {
+    defaultDuration: 5.0,               // seconds (longer = smoother)
+    easing: 'power2.inOut',             // smooth ease-in-out
+    // Smart arc — only adds radius swell when the angular distance is large.
+    // The swell follows the same easing as the angle tween so the peak
+    // occurs at the spatial midpoint of the orbit, not at a fixed time.
+    arcAngleThreshold: 0.5,             // radians — minimum angle change to trigger arc
+    arcSensitivity: 0.25,              // how much angle change maps to swell (lower = gentler)
+    arcMaxSwell: 0.3,                  // maximum swell as fraction of max(startR, endR)
+  },
+
+  // ── Intro sequence (timing config in introTimeline.js) ──────
+  // These are fallback camera positions only — used if pins.glb cameras aren't found.
+  intro: {
+    skyCamera: {
+      alpha: Math.PI / 2,
+      beta: 0.15,
+      radius: 5,
+      target: { x: 0, y: 0, z: 0 },
+    },
+    beachCloseupShot: {
+      alpha: -1.2,
+      beta: 1.05,
+      radius: 12,
+      target: { x: 0, y: 0.5, z: 0 },
+    },
+  },
+
+  // ── Orbit overview shot ──────────────────────────────────────
+  orbit: {
+    alpha: Math.PI / 2,
+    beta: 1.0,
+    radius: 80,
+    target: { x: 0, y: 0, z: 0 },
+  },
+
+  // ── Pins ─────────────────────────────────────────────────────
+  pins: {
+    bobbingAmplitude: 0.08,             // world units
+    bobbingSpeed: 1.4,                  // cycles per second
+    rotationSpeed: 0.4,                 // radians per second
+    defaultHitScreenRadius: 52,         // pixels — tap detection radius
+    meshScale: 1.0,                     // scale multiplier for pin mesh (pin.glb is small)
+    lightIntensity: 1.5,                // pin directional light intensity
+    shadowMapSize: 1024,                // shadow map resolution
+    // Directional light direction/position extracted from pins.glb light-dir
+    lightDirection: { x: 0.5264, y: -0.6270, z: -0.5743 },
+    lightPosition: { x: -26.319, y: 31.350, z: 28.714 },
+    // Status colors — diffuse color per pin state
+    statusColors: {
+      invisible: { r: 0.3, g: 0.3, b: 0.3 },
+      disabled:  { r: 0.25, g: 0.25, b: 0.28 },
+      locked:    { r: 0.45, g: 0.45, b: 0.48 },
+      normal:    { r: 0.9, g: 0.15, b: 0.15 },
+      active:    { r: 0.95, g: 0.75, b: 0.1 },
+      completed: { r: 0.15, g: 0.75, b: 0.25 },
+    },
+    // Emissive multiplier per status (fraction of diffuse → emissive)
+    statusEmissiveScale: {
+      invisible: 0,
+      disabled:  0.1,
+      locked:    0.15,
+      normal:    0.6,
+      active:    0.5,
+      completed: 0.4,
+    },  },
 
   // ── Sky ──────────────────────────────────────────────────────
   sky: {

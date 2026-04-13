@@ -1,0 +1,125 @@
+{
+  "pins": [
+    {
+      "id": "pin-1",
+      "label": "Pin 1",
+      "num": 1,
+      "position": { "x": -16.439, "y": 6.148, "z": -15.228 },
+      "hitScreenRadius": 52
+    },
+    {
+      "id": "pin-2",
+      "label": "Pin 2",
+      "num": 2,
+      "position": { "x": 11.259, "y": 6.584, "z": 8.509 },
+      "hitScreenRadius": 52
+    },
+    {
+      "id": "pin-3",
+      "label": "Pin 3",
+      "num": 3,
+      "position": { "x": 8.992, "y": 17.581, "z": -3.626 },
+      "hitScreenRadius": 52
+    },
+    {
+      "id": "pin-4",
+      "label": "Pin 4",
+      "num": 4,
+      "position": { "x": 7.708, "y": 5.088, "z": -16.450 },
+      "hitScreenRadius": 52
+    },
+    {
+      "id": "pin-5",
+      "label": "Pin 5",
+      "num": 5,
+      "position": { "x": 10.417, "y": 5.156, "z": -2.326 },
+      "hitScreenRadius": 52
+    },
+    {
+      "id": "pin-6",
+      "label": "Pin 6",
+      "num": 6,
+      "position": { "x": -9.502, "y": 7.611, "z": -12.762 },
+      "hitScreenRadius": 52
+    },
+    {
+      "id": "pin-7",
+      "label": "Pin 7",
+      "num": 7,
+      "position": { "x": -2.522, "y": 6.202, "z": 1.423 },
+      "hitScreenRadius": 52
+    }
+  ],
+  "cameraShots": {
+    "pin-1": {
+      "alpha": 2.278,
+      "beta": 1.230,
+      "radius": 13.724,
+      "target": { "x": -10.467, "y": 0, "z": -22.257 }
+    },
+    "pin-2": {
+      "alpha": 2.867,
+      "beta": 1.492,
+      "radius": 52.821,
+      "target": { "x": 57.178, "y": 0, "z": -4.845 }
+    },
+    "pin-3": {
+      "alpha": 0.516,
+      "beta": 1.128,
+      "radius": 32.915,
+      "target": { "x": -13.166, "y": 0, "z": -15.821 }
+    },
+    "pin-4": {
+      "alpha": -2.633,
+      "beta": 1.240,
+      "radius": 16.384,
+      "target": { "x": 14.121, "y": 0, "z": -11.334 }
+    },
+    "pin-5-waypoints": [
+      {
+        "alpha": -0.801,
+        "beta": 1.536,
+        "radius": 112.330,
+        "target": { "x": -64.252, "y": 0, "z": 73.621 },
+        "duration": null,
+        "easing": "power2.inOut",
+        "arc": false
+      },
+      {
+        "alpha": 1.202,
+        "beta": 1.458,
+        "radius": 35.286,
+        "target": { "x": -5.935, "y": 0, "z": -32.205 },
+        "duration": null,
+        "easing": "power2.inOut",
+        "arc": false
+      }
+    ],
+    "pin-6": {
+      "alpha": -0.835,
+      "beta": 1.497,
+      "radius": 64.016,
+      "target": { "x": -50.229, "y": 0, "z": 32.302 }
+    },
+    "pin-7-waypoints": [
+      {
+        "alpha": 1.464,
+        "beta": 1.578,
+        "radius": 20.000,
+        "target": { "x": -4.011, "y": 4.185, "z": -12.844 },
+        "duration": null,
+        "easing": "power2.inOut",
+        "arc": false
+      },
+      {
+        "alpha": 1.372,
+        "beta": 1.534,
+        "radius": 106.073,
+        "target": { "x": -23.053, "y": 0, "z": -105.403 },
+        "duration": null,
+        "easing": "power2.inOut",
+        "arc": false
+      }
+    ]
+  }
+}
